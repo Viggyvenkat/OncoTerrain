@@ -3,7 +3,7 @@ OncoTerrain enables clinicians to investigate cell phenotypes to capture intratu
 
 ### Overview 
 ---
-OncoTerrain is a powerful AI/ML Model, built to support AnnData & scanpy objects. OncTerrain is largely based on Google's Tabular Network to predict cells of origin, developmental trajectories, and cell malignancy in 10x genomics scRNA-seq data. Our paper goes into novel ligand-receptor (LR) interactions; Epithelial, Stromal, Immune cell dynamics, and demoing OncoTerrain. OncoTerrain was trained using the CELLxGENE Lung Cancer Atlas (LuCA) and the Normal Lung Atlas and applied to a variety of in-house and external scRNA-seq cohorts. All LR interactions were validated using external 10x Visium spatial RNA-seq cohorts.  
+OncoTerrain is a powerful AI/ML Model, built to support AnnData & scanpy objects. OncoTerrain is largely based on Google's Tabular Network to predict cells of origin, developmental trajectories, and cell malignancy in 10x genomics scRNA-seq data. Our paper goes into novel ligand-receptor (LR) interactions; Epithelial, Stromal, Immune cell dynamics, and demoing OncoTerrain. OncoTerrain was trained using the CELLxGENE Lung Cancer Atlas (LuCA) and the Normal Lung Atlas and applied to a variety of in-house and external scRNA-seq cohorts. All LR interactions were validated using external 10x Visium spatial RNA-seq cohorts.  
 
 ### Highlights
 ---
@@ -38,7 +38,7 @@ OncoTerrain-paper/
 |   |-- figure4-cellchat.ipynb
 ```
 
-Our preprocessing script has been engineered to handle other samples as well, as long as they are in the: ``` ../../data ``` respective of where the preprocessing.py script lies.
+Our preprocessing script has been engineered to handle other samples as well, as long as they are in the: ``` ../../data ``` respective of where the preprocessing.py script lies. All of the code for the figures lies in ```src/fig-generation``` or in ```notebooks```, whereas all of the data cleaning, preprocessing, and exploration lies within ```src/TMEGPT```. All of the documentation (in the form of docstrings) lies within the files for futher, clear explanations. For utilizing OncoTerrain, we have set up a seperate OncoTerrain repository with instructions on how to utilize our model for inference.
 
 ### Computing Resources
 ---
@@ -46,7 +46,7 @@ All development was conducted on the Rutgers [Amarel HPCU](https://oarc.rutgers.
 
 ### References
 ---
-If you use OncoTerrain or its insights in your research, make sure to cite:
+If you use OncoTerrain, its methods, or its insights in your research, we kindly request you cite:
 1. Hu, X. et al. Deconstructing evolutionary histories of complex rearrangements during tumorigenesis in lung. bioRxiv
 2. Venkat, V. et al. Disruptive changes in tissue microenvironment prime oncogenic processes at different stages of carcinogenesis in lung. bioRxiv, 1-20 (2024). 
 
