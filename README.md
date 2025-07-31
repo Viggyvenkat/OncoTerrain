@@ -2,7 +2,8 @@
 
 This GitHub Repository contains all of the scripts required to preprocess and generate any of the figures in our manuscript. We have divided our codebase into easily navigable sections listed below:
 
-OncoTerrain-paper/
+```
+OncoTerrain-paper/ 
 |-- src/
 |   |-- fig-generation/
 |   |   |-- copyKAT-val.R
@@ -20,6 +21,7 @@ OncoTerrain-paper/
 |-- notebooks/
 |   |-- creating_vectors.ipynb
 |   |-- figure4-cellchat.ipynb
+```
 
 Our preprocessing script has been engineered to handle other samples as well, as long as they are in the:
 
