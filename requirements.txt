@@ -1,0 +1,12 @@
+transformers
+torch
+igraph
+scanpy
+leidenalg
+mygene
+matplotlib
+seaborn
+pandas
+bbknn
+cellphonedb
+gseapy

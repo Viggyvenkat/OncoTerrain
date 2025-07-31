@@ -1,0 +1,937 @@
+import warnings
+warnings.filterwarnings("ignore")
+
+import os
+import re
+import logging
+import scanpy as sc
+import mygene
+import matplotlib.pyplot as plt
+import seaborn as sns
+import concurrent.futures
+import pandas as pd
+import numpy as np
+import gseapy as gp
+from pathlib import Path
+from Graph import Node, Edge, Graph
+from cellphonedb.src.core.methods import cpdb_statistical_analysis_method
+import pickle
+import concurrent.futures
+from py_monocle import (learn_graph, order_cells, compute_cell_states, regression_analysis, 
+                         differential_expression_genes,)
+import infercnvpy as cnv
+from matplotlib.colors import LinearSegmentedColormap
+from scipy import sparse
+import matplotlib.patches as mpatches
+import matplotlib.colors as mcolors
+
+# Define the base directory as the current working directory (top folder)
+BASE_DIR = Path.cwd()
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    filename=str(BASE_DIR / 'debug_log.txt'),
+    filemode='w',
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+class PreprocessingPipeline:
+    def __init__(self, data_dir="data"):
+        """
+        data_dir: path containing SDxx subfolders or .h5ad files.
+        """
+        data_dir = Path(data_dir)
+        if not data_dir.is_absolute():
+            data_dir = Path.cwd() / data_dir
+        self.data_dir = data_dir
+        sc.settings.n_jobs = -1
+        self.adata = None
+
+        # Immediate subdirectories under data_dir
+        self.sample_dirs = [entry.path for entry in os.scandir(self.data_dir) if entry.is_dir()]
+
+        logging.info(f"Initialized pipeline with data_dir: {self.data_dir}")
+        logging.info(f"Found {len(self.sample_dirs)} sample directories")
+    
+    @staticmethod
+    def _load_h5ad_file(fpath):
+        """
+        Load a single .h5ad file, annotate project/sample/source,
+        and make sure we preserve any existing `tumor_stage`.
+        """
+        logging.info(f"Loading h5ad file: {fpath}")
+        try:
+            ad = sc.read_h5ad(fpath).to_memory()
+            sample_id = os.path.splitext(os.path.basename(fpath))[0]
+
+            # 1) Preserve existing tumor_stage or initialize as NaN
+            if 'tumor_stage' not in ad.obs.columns:
+                ad.obs['tumor_stage'] = np.nan
+
+            # 2) Annotate sample, source, project without clobbering existing obs
+            ad.obs['sample']  = ad.obs.get('sample', sample_id)
+            ad.obs['source']  = fpath
+            ad.obs['project'] = ad.obs.get('project', sample_id)
+
+            # 3) Ensure batch is string if present
+            if 'batch' in ad.obs.columns:
+                ad.obs['batch'] = ad.obs['batch'].astype(str)
+
+            return ad
+
+        except Exception as e:
+            logging.info(f"  Error loading {fpath}: {e}")
+            return None
+
+    @staticmethod
+    def _load_sample_dir(sample_dir):
+        """
+        Load everything under sample_dir (SDxx) into one AnnData:
+        - nested .h5ad and 10× data
+        - preserve any existing `tumor_stage`
+        - if missing, infer `tumor_stage` (and `disease`) from the SD number
+        """
+        logging.info(f"Loading sample directory as one project: {sample_dir}")
+        # mapping SD→cancer stage
+        sd_numbers    = [2, 3, 4, 6, 7, 8, 9, 10, 12, 14, 15, 16]
+        cancer_stages = ["insitu", "benign", "benign", "benign", "invasive",
+                         "insitu", "insitu", "insitu", "insitu", "invasive",
+                         "insitu", "invasive"]
+        sd_to_stage   = {f"SD{n}": s for n, s in zip(sd_numbers, cancer_stages)}
+        stage_to_ts   = {'benign':'non-cancer', 'insitu':'early', 'invasive':'advanced'}
+
+        project_name = os.path.basename(sample_dir)
+        collected = []
+
+        for root, dirs, files in os.walk(sample_dir):
+            # --- nested .h5ad files ---
+            h5ad_files = [f for f in files if f.lower().endswith(".h5ad")]
+            if h5ad_files:
+                for fname in h5ad_files:
+                    fpath = os.path.join(root, fname)
+                    logging.info(f"  → Loading nested h5ad: {fpath}")
+                    try:
+                        ad = sc.read_h5ad(fpath).to_memory()
+
+                        # 1) Preserve or initialize tumor_stage
+                        if 'tumor_stage' not in ad.obs.columns:
+                            # infer from folder name if possible
+                            m = re.search(r"SD(\d+)", project_name)
+                            key = f"SD{m.group(1)}" if m else None
+                            inferred = stage_to_ts.get(sd_to_stage.get(key, ''), np.nan)
+                            ad.obs['tumor_stage'] = inferred
+
+                        # 2) Preserve or assign disease
+                        if 'disease' not in ad.obs.columns and key in sd_to_stage:
+                            ad.obs['disease'] = (
+                                "normal" if sd_to_stage[key]=="benign"
+                                else "lung adenocarcinoma"
+                            )
+
+                        # 3) Annotate sample/project/source
+                        sample_id = os.path.splitext(fname)[0]
+                        ad.obs['sample']  = ad.obs.get('sample', sample_id)
+                        ad.obs['project'] = project_name
+                        ad.obs['source']  = root
+
+                        if 'batch' in ad.obs.columns:
+                            ad.obs['batch'] = ad.obs['batch'].astype(str)
+
+                        ad.obs.index = ad.obs.index.astype(str)
+                        collected.append(ad)
+                    except Exception as e:
+                        logging.info(f"    Error loading {fpath}: {e}")
+                continue
+
+            # --- 10× Matrix directory ---
+            if any(f.lower().endswith((".mtx", ".mtx.gz")) for f in files):
+                logging.info(f"  → Loading 10× directory: {root}")
+                try:
+                    ad = sc.read_10x_mtx(root, var_names="gene_symbols", cache=True).to_memory()
+
+                    # Initialize tumor_stage if missing
+                    if 'tumor_stage' not in ad.obs.columns:
+                        m = re.search(r"SD(\d+)", project_name)
+                        key = f"SD{m.group(1)}" if m else None
+                        ad.obs['tumor_stage'] = stage_to_ts.get(sd_to_stage.get(key, ''), np.nan)
+
+                    # Assign disease if missing
+                    if 'disease' not in ad.obs.columns and key in sd_to_stage:
+                        ad.obs['disease'] = (
+                            "normal" if sd_to_stage[key]=="benign"
+                            else "lung adenocarcinoma"
+                        )
+
+                    ad.obs['sample']  = project_name
+                    ad.obs['project'] = project_name
+                    ad.obs['source']  = root
+                    ad.obs['tissue']  = "lung"
+                    ad.obs.index = ad.obs.index.astype(str)
+
+                    if 'batch' in ad.obs.columns:
+                        ad.obs['batch'] = ad.obs['batch'].astype(str)
+
+                    collected.append(ad)
+                except Exception as e:
+                    logging.info(f"    Failed to load 10× data from {root}: {e}")
+
+        if not collected:
+            logging.info(f"No valid data found under {sample_dir}")
+            return []
+
+        # --- concatenate all pieces for this project ---
+        logging.info(f"  → Concatenating {len(collected)} pieces for project {project_name}")
+        merged = sc.concat(
+            collected,
+            join="outer",
+            index_unique="-",
+            label="subbatch"
+        )
+
+        # zero-fill any NaNs in X
+        if sparse.issparse(merged.X):
+            merged.X.data = np.nan_to_num(merged.X.data)
+        else:
+            merged.X = np.nan_to_num(merged.X)
+
+        merged.obs.index = merged.obs.index.astype(str)
+        merged.var.index = merged.var.index.astype(str)
+        logging.info(
+            f"    → Project {project_name} merged: "
+            f"{merged.n_obs} cells, {merged.n_vars} genes"
+        )
+        return [merged]
+
+    @staticmethod
+    def _map_gene_symbols(adata):
+        """
+        Replace ensembl IDs in var_names with human symbols via MyGene.
+        """
+        logging.info("Mapping gene symbols for one AnnData")
+        mg = mygene.MyGeneInfo()
+        ensg_ids = adata.var_names.tolist()
+        query_results = mg.querymany(ensg_ids, scopes="ensembl.gene", fields="symbol", species="human")
+        mapping = {res["query"]: str(res.get("symbol", res["query"])) for res in query_results}
+        adata.var["gene_symbol"] = [mapping.get(g, str(g)) for g in adata.var_names]
+        adata.var["gene_symbol"] = adata.var["gene_symbol"].astype(str)
+        adata.var_names = adata.var["gene_symbol"]
+        adata.var_names_make_unique()
+        adata.var.drop(columns="gene_symbol", inplace=True)
+        adata.var.index = adata.var.index.astype(str)
+        return adata
+
+    def load_all_data(self):
+        """
+        1) Load each root‐level .h5ad and each SDxx folder (as one AnnData).
+        2) Map gene symbols per‐sample.
+        3) Per‐sample QC: filter_cells(min_genes=200), filter_genes(min_cells=10).
+        4) Build union of genes across filtered samples.
+        5) Re‐index each sample into union (zero‐fill), then concatenate.
+        """
+        logging.info("Starting parallel data loading")
+
+        # (A) Collect all root‐level .h5ad files
+        root_h5ad_files = [
+            entry.path
+            for entry in os.scandir(self.data_dir)
+            if entry.is_file() and entry.name.lower().endswith(".h5ad")
+        ]
+
+        all_adata = []
+        failed_samples = []
+
+        # (B) Load in parallel
+        with concurrent.futures.ProcessPoolExecutor(max_workers=16) as executor:
+            futures = []
+            for fpath in root_h5ad_files:
+                futures.append(executor.submit(PreprocessingPipeline._load_h5ad_file, fpath))
+            for sample_dir in self.sample_dirs:
+                futures.append(executor.submit(PreprocessingPipeline._load_sample_dir, sample_dir))
+
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    result = future.result()
+                    if result is None:
+                        continue
+                    if isinstance(result, list):
+                        all_adata.extend([ad for ad in result if ad is not None])
+                    else:
+                        all_adata.append(result)
+                except Exception as e:
+                    logging.info(f"Error retrieving future result: {e}")
+                    failed_samples.append(str(e))
+
+        if not all_adata:
+            errmsg = "No valid data loaded. Errors: " + ", ".join(failed_samples[:5])
+            if len(failed_samples) > 5:
+                errmsg += f" (+{len(failed_samples)-5} more errors)"
+            logging.info(errmsg)
+            raise ValueError(errmsg)
+
+        logging.info(f"Loaded {len(all_adata)} AnnData objects. Failed: {len(failed_samples)}")
+
+        # (C) Drop .raw and ensure 'project' exists
+        for ad in all_adata:
+            ad.raw = None
+            if "project" not in ad.obs.columns:
+                ad.obs["project"] = os.path.basename(ad.obs["source"].iloc[0])
+                logging.info(f"Filled missing project for an AnnData: {ad.obs['project'].iloc[0]}")
+
+        # (D) Map gene symbols per-sample
+        for i in range(len(all_adata)):
+            all_adata[i] = PreprocessingPipeline._map_gene_symbols(all_adata[i])
+
+        # (E) Per-sample QC: filter_cells(min_genes=200), filter_genes(min_cells=10)
+        for i, ad in enumerate(all_adata):
+            logging.info(f"QC sample {i+1}/{len(all_adata)}: {ad.n_obs} cells, {ad.n_vars} genes")
+            sc.pp.filter_cells(ad, min_genes=200)
+            logging.info(f"  After filter_cells: {ad.n_obs} cells")
+            sc.pp.filter_genes(ad, min_cells=10)
+            logging.info(f"  After filter_genes: {ad.n_vars} genes")
+
+        # (F) Build union of filtered gene sets
+        union_genes = sorted({g for ad in all_adata for g in ad.var_names})
+        logging.info(f"Union of genes after QC: {len(union_genes)} genes")
+
+        # (G) Re-index each sample into union_genes (zero-fill missing)
+        gene_to_idx = {g: idx for idx, g in enumerate(union_genes)}
+        reindexed = []
+        for ad in all_adata:
+            orig_genes = list(ad.var_names)
+            n_obs = ad.n_obs
+            n_union = len(union_genes)
+
+            # Build new empty sparse matrix (n_obs × n_union)
+            new_X = sparse.lil_matrix((n_obs, n_union), dtype=ad.X.dtype)
+            orig_indices = [gene_to_idx[g] for g in orig_genes]
+            new_X[:, orig_indices] = ad.X
+
+            new_adata = sc.AnnData(
+                X = new_X.tocsr(),
+                obs = ad.obs.copy(),
+                var = pd.DataFrame(index=union_genes)
+            )
+            new_adata.var.index = new_adata.var.index.astype(str)
+            new_adata.var_names = union_genes
+            logging.info(f"Reindexed sample: {new_adata.n_obs} cells, {new_adata.n_vars} genes")
+            reindexed.append(new_adata)
+
+        # (H) Concatenate reindexed samples
+        keys = [f"{ad.obs['project'].iloc[0]}_{i}" for i, ad in enumerate(reindexed)]
+        self.adata = sc.concat(
+            reindexed,
+            label="batch",
+            keys=keys,
+            join="inner",        # all var_names identical → no "-1" suffix
+            index_unique=None
+        )
+        self.adata.obs.index = self.adata.obs.index.astype(str)
+        self.adata.var.index = self.adata.var.index.astype(str)
+        logging.info(
+            f"Concatenated {len(reindexed)} samples → "
+            f"{self.adata.n_obs} total cells, {self.adata.n_vars} genes"
+        )
+
+        # (I) Final NaNs → 0
+        if sparse.issparse(self.adata.X):
+            self.adata.X.data = np.nan_to_num(self.adata.X.data)
+        else:
+            self.adata.X = np.nan_to_num(self.adata.X)
+
+        return self.adata
+
+    def preprocessing(self):
+        """
+        After merging, perform normalization, log1p, and compute QC metrics on the full union.
+        """
+        if self.adata is None:
+            logging.error("Data not loaded. Run load_all_data() first.")
+            raise ValueError("Data not loaded. Run load_all_data() first.")
+
+        self.adata.obs.index = self.adata.obs.index.astype(str)
+        self.adata.var.index = self.adata.var.index.astype(str)
+
+        # Compute percent mitochondrial genes
+        self.adata.var['mt'] = self.adata.var_names.str.startswith('MT-')
+        sc.pp.calculate_qc_metrics(
+            self.adata,
+            qc_vars=['mt'],
+            percent_top=None,
+            log1p=False,
+            inplace=True
+        )
+
+        # Normalize total counts per cell
+        sc.pp.normalize_total(self.adata, target_sum=1e4)
+        sc.pp.log1p(self.adata)
+
+        logging.debug(
+            "Post-merge normalization/log1p completed. Shape: %s", 
+            self.adata.shape
+        )
+        return self.adata
+
+    def ct_annotation(self):
+        logging.debug("Starting ct_annotation")
+        if self.adata is None:
+            logging.error("Data not preprocessed. Run preprocessing() first.")
+            raise ValueError("Data not preprocessed. Run preprocessing() first.")
+        os.makedirs("../figures", exist_ok=True)
+        os.makedirs("../data", exist_ok=True)
+        sc.tl.pca(self.adata, svd_solver='arpack')
+        sc.external.pp.bbknn(self.adata, batch_key='batch')
+        sc.tl.umap(self.adata)
+        resolutions = [0.1, 1, 5, 10, 20]
+        for res in resolutions:
+            key = f"leiden_res_{res:4.2f}"
+            sc.tl.leiden(self.adata, key_added=key, resolution=res, flavor="igraph")
+        marker_genes = {
+            "NK cells": ["GZMA", "CD7", "CCL4", "CST7", "NKG7", "GNLY", "CTSW", "CCL5", "GZMB", "PRF1"],
+            "AT2": ["SEPP1", "PGC", "NAPSA", "SFTPD", "SLC34A2", "CYB5A", "MUC1", "S100A14", "SFTA2", "SFTA3"],
+            "Alveolar Mφ CCL3+": ["MCEMP1", "UPP1", "HLA-DQA1", "CsAR1", "HLA-DMA", "AIF1", "LST1", "LINO1272", "MRC1", "CCL18"],
+            "Suprabasal": ["PRDX2", "KRT19", "SFN", "TACSTD2", "KRT5", "LDHB", "KRT17", "KLK11", "S100A2", "SERPINB4"],
+            "Basal resting": ["CYR61", "PERP", "IGFBP2", "KRT19", "KRT5", "KRT17", "KRT15", "S100A2", "LAMB3", "BCAM"],
+            "EC venous pulmonary": ["VWF", "MGP", "GNG11", "RAMP2", "SPARCL1", "IGFBP7", "IFI27", "CLDN5", "ACKR1", "AQP1"],
+            "CD8 T cells": ["CD8A", "CD3E", "CCL4", "CD2", "CXCR4", "GZMA", "NKG7", "IL32", "CD3D", "CCL5"],
+            "EC arterial": ["SPARCL1", "SOX17", "IFI27", "TM4SF1", "AZM", "CLEC14A", "GIMAP7", "CRIP2", "CLDN5", "PECAM1"],
+            "Peribronchial fibroblasts": ["IGFBP7", "COL1A2", "COL3A1", "AZM", "BGN", "DCN", "MGP", "LUM", "MFAP4", "C1S"],
+            "CD4 T cells": ["CORO1A", "KLRB1", "CD3E", "LTB", "CXCR4", "IL7R", "TRAC", "IL32", "CD2", "CD3D"],
+            "AT1": ["SFTA2", "CEACAM6", "FXYD3", "CAV1", "TSPAN13", "KRT7", "ADIRF", "HOPX", "AGER", "EMP2"],
+            "Multiciliated (non-nasal)": ["SNTN", "FAM229B", "TMEM231", "CSorf49", "C12orf75", "GSTAT", "C11orf97", "RP11-356K23.1", "CD24", "RP11-295M3.4"],
+            "Plasma cells": ["ITM2C", "TNFRSF17", "FKBP11", "IGKC", "IGHA1", "IGHG1", "CD79A", "JCHAIN", "MZB1", "ISG20"],
+            "Goblet (nasal)": ["KRT7", "MUC1", "MUCSAC", "MSMB", "CP", "LM07", "LCN2", "CEACAM6", "BPIFB1", "PIGR"],
+            "Club (nasal)": ["ELF3", "C19orf33", "KRT8", "KRT19", "TACSTD2", "MUC1", "S100A14", "CXCL17", "PSCA", "FAM3D"],
+            "SM activated stress response": ["C11orf96", "HES4", "PLAC9", "FLNA", "KANK2", "TPM2", "PLN", "SELM", "GPX3", "LBH"],
+            "Classical monocytes": ["LST1", "IL1B", "LYZ", "COTL1", "S100A9", "VCAN", "S100A8", "S100A12", "AIF1", "FCN1"],
+            "Monocyte derived Mφ": ["LYZ", "ACP5", "TYROBP", "LGALS1", "CD68", "AIF1", "CTSL", "EMP3", "FCER1G", "LAPTM5"],
+            "Alveolar Mφ proliferating": ["H2AFV", "STMN1", "LSM4", "GYPC", "PTTG1", "KIA40101", "FABP4", "CKS1B", "UBE2C", "HMGN2"],
+            "Club (non-nasal)": ["SCGB3A1", "CYP2F1", "GSTAT", "HES4", "TSPAN8", "TFF3", "MSMB", "BPIFB1", "SCGB1A1", "PIGR"],
+            "SMG serous (bronchial)": ["AZGP1", "ZG16B", "PIGR", "NDRG2", "LPO", "C6orf58", "DMBT1", "PRB3", "FAM3D", "RP11-1143G9.4"],
+            "EC venous systemic": ["VWF", "MGP", "GNG11", "PLVAP", "RAMP2", "SPARCL1", "IGFBP7", "AZM", "CLEC14A", "ACKR1"],
+            "Non classical monocytes": ["PSAP", "FCGR3A", "FCN1", "CORO1A", "COTL1", "FCER1G", "LAPTM5", "CTSS", "AIF1", "LST1"],
+            "EC general capillary": ["EPAS1", "GNG11", "IFI27", "TM4SF1", "EGFL7", "AQP1", "VWF", "FCN3", "SPARCL1", "CLDN5"],
+            "Adventitial fibroblasts": ["COL6A2", "SFRP2", "IGFBP7", "IGFBP6", "COL3A1", "C1S", "MMP2", "MGP", "SPARC", "COL1A2"],
+            "Lymphatic EC mature": ["PPFIBP1", "GNG11", "RAMP2", "CCL21", "MMRN1", "IGFBP7", "SDPR", "TM4SF1", "CLDN5", "ECSCR"],
+            "EC aerocyte capillary": ["EMCN", "HPGD", "IFI27", "CA4", "EGFL7", "AQP1", "IL1RL1", "SPARCL1", "SDPR", "CLDN5"],
+            "Smooth muscle": ["PRKCDBP", "NDUF4AL2", "MYL9", "ACTA2", "MGP", "CALD1", "TPM1", "TAGLN", "IGFBP7", "TPM2"],
+            "Alveolar fibroblasts": ["LUM", "COL6A1", "CYR61", "C1R", "COL1A2", "MFAP4", "A2M", "C1S", "ADH1B", "GPX3"],
+            "Multiciliated (nasal)": ["RP11-356K23.1", "EFHC1", "CAPS", "ROPN1L", "RSPH1", "C9orf116", "TMEM190", "DNAL1", "PIFO", "ODF3B"],
+            "Goblet (bronchial)": ["MUC5AC", "MSMB", "PI3", "MDK", "ANKRD36C", "TFF3", "PIGR", "SAA1", "CP", "BPIFB1"],
+            "Neuroendocrine": ["UCHL1", "TFF3", "APOA1BP", "CLDN3", "SEC11C", "NGFRAP1", "SCGS", "HIGD1A", "PHGR1", "CD24"],
+            "Lymphatic EC differentiating": ["AKAP12", "TFF3", "SDPR", "CLDN5", "TCF4", "TFPI", "TIMP3", "GNG11", "CCL21", "IGFBP7"],
+            "DC2": ["ITGB2", "LAPTM5", "HLA-DRB1", "HLA-DPB1", "HLA-DPA1", "HLA-DMB", "HLA-DQB1", "HLA-DQA1", "HLA-DMA", "LST1"],
+            "Transitional Club AT2": ["CXCL17", "C16orf89", "RNASE1", "KRT7", "SCGB1A1", "PIGR", "SCGB3A2", "KLK11", "SFT41P", "FOLR1"],
+            "DC1": ["HLA-DPA1", "CPNE3", "CORO1A", "CPVL", "C1orf54", "WDFY4", "LSP1", "HLA-DQB1", "HLA-DQA1", "HLA-DMA"],
+            "Myofibroblasts": ["CALD1", "CYR61", "TAGLN", "MT1X", "PRELP", "TPM2", "GPX3", "CTGF", "IGFBP5", "SPARCL1"],
+            "B cells": ["CD69", "CORO1A", "LIMD2", "BANK1", "LAPTM5", "CXCR4", "LTB", "CD79A", "CD37", "MS4A1"],
+            "Mast cells": ["VWASA", "RGS13", "C1orf186", "HPGD5", "CPA3", "GATA2", "MS4A2", "KIT", "TPSAB1", "TPSB2"],
+            "Interstitial Mφ perivascular": ["MRC1", "RNASE1", "FGL2", "RNASE6", "HLA-DPA1", "GPR183", "CD14", "HLA-DPB1", "MS4A6A", "AIF1"],
+            "SMG mucous": ["FKBP11", "TCN1", "GOLM1", "TFF3", "PIGR", "KLK11", "MARCKSL1", "CRACR2B", "SELM", "MSMB"],
+            "AT2 proliferating": ["CDK1", "LSM3", "CKS1B", "EIF1AX", "UBE2C", "MRPL14", "PRC1", "CENPW", "EMP2", "DHFR"],
+            "Goblet (subsegmental)": ["MDK", "MUC5B", "SCGB1A1", "CP", "C3", "TSPAN8", "TFF3", "MSMB", "PIGR", "BPIFB1"],
+            "Pericytes": ["MYL9", "SPARC", "SPARCL1", "IGFBP7", "COL4A1", "GPX3", "PDGFRB", "CALD1", "COX4I2", "TPM2"],
+            "SMG duct": ["PIP", "ZG16B", "PIGR", "SAA1", "MARCKSL1", "ALDH1A3", "SELM", "LTF", "RARRES1", "AZGP1"],
+            "Mesothelium": ["CEBPD", "LINCO1133", "MRPL33", "UPK3B", "CFB", "SEPP1", "EID1", "HP", "CUX1", "MRPS21"],
+            "SMG serous (nasal)": ["ZG16B", "MUC7", "C6orf58", "PRB3", "LTF", "LYZ", "PRR4", "AZGP1", "PIGR", "RP11-1143G9.4"],
+            "Ionocyte": ["FOXI1", "ATP6V1A", "GOLM1", "TMEM61", "SEC11C", "SCNN1B", "ASCL3", "CLCNKB", "HEPACAM2", "CD24"],
+            "Alveolar Mφ MT-positive": ["GSTO1", "LGALS1", "CTSZ", "MT2A", "APOC1", "CTSL", "UPP1", "CCL18", "FABP4", "MT1X"],
+            "Fibromyocytes": ["NEXN", "ACTG2", "LMOD1", "IGFBP7", "PPP1R14A", "DES", "FLNA", "TPM2", "PLN", "SELM"],
+            "Deuterosomal": ["RSPH9", "PIFO", "RUVBL2", "C11orf88", "FAM183A", "MORN2", "SAXO2", "CFAP126", "FAM229B", "C5orf49"],
+            "Tuft": ["MUC20", "KHDRBS1", "ZNF428", "BIK", "CRYM", "LRMP", "HES6", "KIT", "AZGP1", "RASSF6"],
+            "Plasmacytoid DCs": ["IL3RA", "TCF4", "LTB", "GZMB", "JCHAIN", "ITM2C", "IRF8", "PLD4", "IRF7", "C12orf75"],
+            "T cells proliferating": ["TRAC", "HMGN2", "IL32", "CORO1A", "ARHGDIB", "STMN1", "RAC2", "IL2RG", "HMGB2", "CD3D"],
+            "Subpleural fibroblasts": ["SERPING1", "C1R", "COL1A2", "NNMT", "COL3A1", "MT1E", "MT1X", "PLA2G2A", "SELM", "MT1M"],
+            "Lymphatic EC proliferating": ["S100A16", "TUBB", "HMGN2", "COX20", "LSM2", "HMGN1", "ARPC1A", "ECSCR", "EID1", "MARCKS"],
+            "Migratory DCs": ["IL2RG", "HLA-DRBS", "TMEM176A", "BIRC3", "TYMP", "COL22", "SYNGR2", "CD83", "LSP1", "HLA-DOA1"],
+            "Alveolar macrophages": ["MS4A7", "C1QA", "HLA-DQB1", "HLA-DMA", "HLA-DPB1", "HLA-DPA1", "ACP5", "C1QC", "CTSS", "HLA-DQA1"],
+        }
+        self.adata.var_names = self.adata.var_names.str.upper()
+        self.adata.var_names_make_unique()
+        marker_genes = {k: [gene.upper() for gene in v] for k, v in marker_genes.items()}
+        missing_genes = [gene for genes in marker_genes.values() for gene in genes if gene not in self.adata.var_names]
+        logging.debug("Missing genes: %s", missing_genes)
+        filtered_marker_genes = {k: [gene for gene in v if gene in self.adata.var_names] for k, v in marker_genes.items()}
+        num_categories = 20
+        seaborn_palette = sns.color_palette("husl", num_categories)
+        for res in resolutions:
+            cluster_key = f"leiden_res_{res:4.2f}"
+            logging.debug(f"Annotating clusters with {cluster_key}")
+            annotation = self.__annotate_clusters_by_markers(self.adata, cluster_key, filtered_marker_genes)
+            self.adata.obs[f"{cluster_key}_celltype"] = self.adata.obs[cluster_key].map(annotation)
+        for res in resolutions:
+            cluster_key = f"leiden_res_{res:4.2f}"
+            celltype_key = f"{cluster_key}_celltype"
+            sc.pl.umap(
+                self.adata,
+                color=cluster_key,
+                title=f"Leiden Clusters (res={res:4.2f})",
+                palette=seaborn_palette,
+                show=False,
+                save=f"_umap_leiden_res_{res:4.2f}.png"
+            )
+            sc.pl.umap(
+                self.adata,
+                color=celltype_key,
+                title=f"Annotated Cell Types (res={res:4.2f})",
+                palette=seaborn_palette,
+                legend_loc="right margin",
+                show=False,
+                save=f"_umap_celltype_res_{res:4.2f}.png"
+            )
+        for col in self.adata.obs.select_dtypes(["category"]).columns:
+            self.adata.obs[col] = self.adata.obs[col].astype(str)
+        self.adata.write("data/processed_data.h5ad")
+        logging.debug("ct_annotation completed")
+        return self.adata
+
+    @staticmethod
+    def __annotate_clusters_by_markers(adata, cluster_key, marker_dict):
+        cluster2celltype = {}
+        for cluster in adata.obs[cluster_key].unique():
+            subset_adata = adata[adata.obs[cluster_key] == cluster]
+            if subset_adata.n_obs == 0:
+                logging.warning("Cluster %s has no cells. Skipping annotation.", cluster)
+                continue
+            best_celltype = None
+            best_score = -np.inf
+            for celltype, markers in marker_dict.items():
+                valid_markers = list(set(markers).intersection(adata.var_names))
+                if len(valid_markers) == 0:
+                    continue
+                avg_expr = subset_adata[:, valid_markers].X.mean()
+                if avg_expr > best_score:
+                    best_score = avg_expr
+                    best_celltype = celltype
+            cluster2celltype[cluster] = best_celltype
+        return cluster2celltype
+
+    def ___add_and_aggregate_module_scores(self, adata, gmt_file):
+        """
+        For the adata object add hallmark pathway supplied by gmt_file to the metadata for each cell.
+        """
+        gene_sets = gp.get_library(str(gmt_file))
+        adata_genes = [gene.upper() for gene in adata.var_names]
+        
+        for pathway, genes in gene_sets.items():
+            genes = [g.upper() for g in genes]
+            genes_in_adata = [gene for gene in genes if gene in adata_genes]
+            
+            if len(genes_in_adata) > 0:
+                print(f"Calculating module score for pathway: {pathway}")
+                print(f"Genes in pathway (after matching): {genes_in_adata}")
+                sc.tl.score_genes(adata, genes_in_adata, score_name=pathway)
+                if pathway in adata.obs.columns:
+                    score_col = pathway
+                elif f"{pathway}_score" in adata.obs.columns:
+                    score_col = f"{pathway}_score"
+                else:
+                    score_col = None
+                if score_col:
+                    print(f"Module score for {pathway} added to adata.obs as {score_col}")
+                else:
+                    print(f"Module score for {pathway} was not added to adata.obs")
+            else:
+                print(f"No genes found for pathway {pathway} in AnnData object")
+        return adata
+
+    def hp_calculation(self):
+        """
+        Run code to generate hallmark pathway scores.
+        """
+        if os.path.exists(BASE_DIR / "data/processed_data.h5ad"):
+            self.adata = sc.read_h5ad(BASE_DIR / "data/processed_data.h5ad")
+            self.adata.obs_names_make_unique()
+        logging.debug("starting hp_calculation")
+        gmt_dir = BASE_DIR / "HallmarkPathGMT"
+        gmt_files = list(gmt_dir.glob("*.gmt"))
+        for gmt_file in gmt_files:
+            logging.debug(f"Processing GMT file: {gmt_file}")
+            self.adata = self.___add_and_aggregate_module_scores(self.adata, gmt_file)
+        self.adata.write(str(BASE_DIR / "data/processed_data.h5ad"))
+        logging.debug("hp_calculation completed")
+        return self.adata
+
+    def __sp_generation(self, cpdb_inputs_dir, meta_file, counts_file, output_dir):
+        """
+        Run CellPhoneDB on a single sample’s meta/counts files.
+        If the Python API omits 'significant_means', fall back to loading whatever files exist.
+        """
+        logging.debug(f"Entering __sp_generation: output_dir={output_dir}")
+        os.makedirs(output_dir, exist_ok=True)
+
+        try:
+            logging.debug("  → Running cpdb_statistical_analysis_method.call(...)")
+            cpdb_result = cpdb_statistical_analysis_method.call(
+                cpdb_file_path=str(cpdb_inputs_dir),
+                meta_file_path=str(meta_file),
+                counts_file_path=str(counts_file),
+                counts_data='hgnc_symbol',
+                score_interactions=True,
+                iterations=1000,
+                threshold=0.1,
+                threads=8,
+                result_precision=3,
+                pvalue=0.05,
+                subsampling=False,
+                subsampling_log=False,
+                subsampling_num_pc=100,
+                subsampling_num_cells=1000,
+                separator='|',
+                debug=False,
+                output_path=str(output_dir),
+                output_suffix=None
+            )
+            logging.debug("  ← Finished cpdb_statistical_analysis_method.call(...)")
+        except KeyError as e:
+            logging.warning(f"CellPhoneDB call missing key {e!r}; reading output files from disk")
+            import glob, pandas as pd
+
+            cpdb_result = {}
+            for key in [
+                'deconvoluted', 'deconvoluted_percents',
+                'means', 'pvalues',
+                'significant_means', 'interaction_scores'
+            ]:
+                pattern = os.path.join(output_dir, f"{key}*.txt")
+                files = sorted(glob.glob(pattern))
+                if files:
+                    cpdb_result[key] = pd.read_csv(files[-1], sep='\t', index_col=0)
+                    logging.debug(f"    • Loaded '{key}' from {files[-1]}")
+                else:
+                    cpdb_result[key] = pd.DataFrame()
+                    logging.debug(f"    • No '{key}' files found; using empty DataFrame")
+
+        logging.debug("Exiting __sp_generation")
+        return cpdb_result
+
+    def lr_interactions_graph_representation(self):
+        """
+        1) Load AnnData (subset to top-5000 HVGs first).
+        2) For each sample:
+        a) write sample-specific meta/counts,
+        b) run CellPhoneDB,
+        c) build ONE Graph() per sample including hallmark scores on nodes and edges from CPDB.
+        3) Return {sample: Graph, …}.
+        Added debug logs at each major step.
+        """
+        logging.debug("=== START lr_interactions_graph_representation (per sample) ===")
+
+        # 1) Load AnnData
+        if os.path.exists(BASE_DIR / "data/processed_data.h5ad"):
+            logging.debug("Loading processed_data.h5ad into self.adata")
+            self.adata = sc.read_h5ad(BASE_DIR / "data/processed_data.h5ad")
+            self.adata.obs_names_make_unique()
+        else:
+            logging.debug("Using existing self.adata (no processed_data.h5ad found)")
+
+        logging.debug(f"Initial AnnData size: {self.adata.n_obs} cells × {self.adata.n_vars} genes")
+
+        # 1a) HVG selection
+        logging.debug("Computing top 5000 highly variable genes (HVGs)")
+        sc.pp.highly_variable_genes(
+            self.adata,
+            n_top_genes=5000,
+            flavor='seurat_v3',
+            subset=False,
+            n_bins=20,
+            batch_key=None
+        )
+        num_hvg = int(self.adata.var.get('highly_variable', False).sum())
+        logging.debug(f"  → {num_hvg} genes flagged as HVG")
+        self.adata = self.adata[:, self.adata.var['highly_variable']].copy()
+        logging.debug(f"After HVG subset: {self.adata.n_obs} cells × {self.adata.n_vars} genes")
+
+        # 2) Hallmark columns
+        gmt_dir = BASE_DIR / "HallmarkPathGMT"
+        hallmark_columns = []
+        if gmt_dir.exists():
+            logging.debug(f"Scanning {gmt_dir} for Hallmark GMTs")
+            for gmt in gmt_dir.glob("*.gmt"):
+                logging.debug(f"  • Parsing {gmt.name}")
+                gs = gp.get_library(str(gmt))
+                for pw in gs:
+                    if pw in self.adata.obs:
+                        hallmark_columns.append(pw)
+                    elif f"{pw}_score" in self.adata.obs:
+                        hallmark_columns.append(f"{pw}_score")
+        hallmark_columns = list(set(hallmark_columns))
+        logging.debug(f"Found {len(hallmark_columns)} hallmark columns")
+
+        # 3) Per-sample processing
+        sample_graphs = {}
+        for sample in self.adata.obs['sample'].unique():
+            logging.debug(f"--- SAMPLE: {sample} ---")
+            ad_sub = self.adata[self.adata.obs['sample'] == sample].copy()
+
+            # write inputs
+            inp = BASE_DIR / f"data/cellphonedb_inputs/{sample}"
+            out = BASE_DIR / f"data/cellphonedb_outputs/{sample}"
+            os.makedirs(inp, exist_ok=True)
+            os.makedirs(out, exist_ok=True)
+
+            meta = pd.DataFrame({
+                'Cell': ad_sub.obs_names,
+                'cell_type': ad_sub.obs['leiden_res_20.00_celltype']
+            })
+            meta_file = inp / "meta.txt"
+            meta.to_csv(meta_file, sep='\t', index=False)
+
+            mat = ad_sub.X.todense() if hasattr(ad_sub.X, "todense") else ad_sub.X
+            counts = pd.DataFrame(mat.T, index=ad_sub.var_names, columns=ad_sub.obs_names)
+            counts.index.name = 'Gene'
+            counts_file = inp / "counts.txt"
+            counts.reset_index().to_csv(counts_file, sep='\t', index=False)
+
+            # run CPDB
+            logging.debug("  → running __sp_generation")
+            cpdb_out = self.__sp_generation(
+                cpdb_inputs_dir=str(BASE_DIR / "data/cellphonedb_inputs/v5.0.0/cellphonedb.zip"),
+                meta_file=str(meta_file),
+                counts_file=str(counts_file),
+                output_dir=str(out)
+            )
+            logging.debug("  ← CPDB done")
+
+            sig = cpdb_out.get('significant_means')
+            if sig is None or sig.empty:
+                logging.debug(f"No significant interactions for sample '{sample}'; skipping.")
+                continue
+
+            # build one graph per sample
+            g = Graph()
+            # add all cell-type nodes with hallmark data
+            cs = ad_sub.obs[['leiden_res_20.00_celltype'] + hallmark_columns].copy()
+            cs.index.name = 'cell_id'
+            for ct, sub in cs.groupby('leiden_res_20.00_celltype'):
+                g.add_node(name=str(ct), df=sub)
+
+            # add edges from significant_means
+            exclude = {
+                'id_cp_interaction','interacting_pair','partner_a','partner_b',
+                'gene_a','gene_b','secreted','receptor_a','receptor_b',
+                'annotation_strategy','is_integrin','directionality',
+                'rank','classification'
+            }
+            for _, row in sig.iterrows():
+                if pd.isna(row['classification']):
+                    continue
+                directed = (row['directionality'].strip() == "Ligand-Receptor")
+                for col, val in row.items():
+                    if col in exclude or pd.isna(val) or float(val) == 0:
+                        continue
+                    parts = col.split('|')
+                    if len(parts) != 2:
+                        continue
+                    src = g.get_node_by_name(parts[0].strip())
+                    tgt = g.get_node_by_name(parts[1].strip())
+                    if src and tgt:
+                        g.add_edge(
+                            src, tgt,
+                            name=str(row['classification']),
+                            quant=float(val),
+                            directed=directed
+                        )
+
+            sample_graphs[sample] = g
+            logging.debug(f"Built graph for sample '{sample}' with "
+                        f"{len(g.nodes)} nodes and {len(g.edges)} edges")
+
+        # persist and return
+        with open(BASE_DIR / 'data/lr_interactions_per_sample.pkl', 'wb') as f:
+            pickle.dump(sample_graphs, f)
+        logging.debug("Saved lr_interactions_per_sample.pkl")
+        logging.debug("=== END lr_interactions_graph_representation ===")
+
+        return sample_graphs
+
+    def monocle_per_celltype(self):
+        """
+        For each cell_type:
+        1) Subset to that cell_type.
+        2) Restrict to top 5000 HVGs (so UMAP/graph is faster).
+        3) Compute UMAP, learn principal graph, pseudotime.
+        4) Overlay sample‐centroids colored by disease.
+        Added logging at key stages to track performance and a thorough NaN/string investigation for 'tumor_stage'.
+        """
+
+        logging.debug("=== START monocle_per_celltype ===")
+
+        # Reload processed data if available
+        if os.path.exists(BASE_DIR / "data/processed_data.h5ad"):
+            logging.debug("Reloading processed_data.h5ad for monocle_per_celltype")
+            self.adata = sc.read_h5ad(BASE_DIR / "data/processed_data.h5ad")
+            self.adata.obs_names_make_unique()
+
+        if self.adata is None:
+            logging.error("Data not preprocessed. Run preprocessing() first.")
+            raise ValueError("Data not preprocessed. Run preprocessing() first.")
+
+        # Ensure tumor_stage annotation exists
+        if 'tumor_stage' not in self.adata.obs.columns:
+            logging.error("Column 'tumor_stage' not found in AnnData.obs")
+            raise KeyError("Column 'tumor_stage' not found in AnnData.obs."
+                        " Please annotate tumor_stage when loading your data.")
+
+        # Robust handling of missing tumor_stage
+        # Convert common string representations of NaN to actual np.nan
+        self.adata.obs['tumor_stage'] = self.adata.obs['tumor_stage'].replace(['nan', 'NaN', 'NAN'], np.nan)
+
+        # Thorough NaN investigation for tumor_stage
+        dist_pre = self.adata.obs['tumor_stage'].value_counts(dropna=False)
+        logging.debug(f"tumor_stage distribution before drop (incl NaN/strings):\n{dist_pre}")
+
+        mask = self.adata.obs['tumor_stage'].notna()
+        n_missing = (~mask).sum()
+        logging.debug(f"Found {n_missing} cells with missing or string 'nan' tumor_stage")
+        if n_missing > 0:
+            logging.debug(f"Dropping {n_missing} cells with missing tumor_stage")
+            self.adata = self.adata[mask, :].copy()
+
+        # Check post-drop distribution
+        dist_post = self.adata.obs['tumor_stage'].value_counts(dropna=False)
+        logging.debug(f"tumor_stage distribution after drop (incl NaN):\n{dist_post}")
+
+        # Prepare output directory for plots
+        trajectory_dir = BASE_DIR / "figures/trajectory_plots"
+        os.makedirs(trajectory_dir, exist_ok=True)
+        logging.debug(f"Ensured trajectory directory exists: {trajectory_dir}")
+
+        # Custom pseudotime colormap
+        cmap_custom = LinearSegmentedColormap.from_list('gray_emerald', ['gray', '#00a4ef'])
+
+        results = {}
+
+        # Loop per cell_type
+        for cell_type in self.adata.obs['leiden_res_20.00_celltype'].unique():
+            logging.debug(f"--- Processing cell_type = '{cell_type}' ---")
+
+            adata_ct = self.adata[self.adata.obs['leiden_res_20.00_celltype'] == cell_type, :].copy()
+            logging.debug(f"  Subset adata_ct: {adata_ct.n_obs} cells × {adata_ct.n_vars} genes")
+
+            if adata_ct.n_obs < 50:
+                logging.warning(f"  Skipping '{cell_type}' ({adata_ct.n_obs} cells < 50)")
+                continue
+
+            # HVG selection
+            logging.debug("  Computing top 5000 HVGs within this cell_type subset")
+            sc.pp.highly_variable_genes(
+                adata_ct,
+                n_top_genes=5000,
+                flavor='seurat_v3',
+                subset=False,
+                n_bins=20,
+                batch_key=None
+            )
+            num_hvg_ct = int(adata_ct.var['highly_variable'].sum()) if 'highly_variable' in adata_ct.var else 0
+            logging.debug(f"    → {num_hvg_ct} HVGs found (expect ~5000)")
+
+            adata_ct = adata_ct[:, adata_ct.var['highly_variable']].copy()
+            logging.debug(f"  After HVG subset: {adata_ct.n_obs} cells × {adata_ct.n_vars} genes")
+
+            # Neighbors + UMAP
+            if 'X_umap' not in adata_ct.obsm:
+                logging.debug("  Computing neighbors + UMAP")
+                sc.pp.neighbors(adata_ct)
+                sc.tl.umap(adata_ct)
+            else:
+                logging.debug("  UMAP already present, skipping neighbor/umap computation")
+
+            umap = adata_ct.obsm['X_umap']
+
+            # Ensure Leiden clusters exist
+            if 'leiden' not in adata_ct.obs:
+                logging.debug("  Computing Leiden clustering")
+                sc.tl.leiden(adata_ct)
+            try:
+                louvain = adata_ct.obs['leiden'].astype(int).values
+            except ValueError:
+                logging.warning("  Found NaN in leiden; coercing to int with NaN→-1")
+                louvain = pd.to_numeric(adata_ct.obs['leiden'], errors='coerce').fillna(-1).astype(int).values
+
+            # Learn principal graph + pseudotime
+            try:
+                logging.debug("  Learning principal graph via learn_graph(...)")
+                projected_points, mst, centroids = learn_graph(
+                    matrix=umap, clusters=louvain
+                )
+                logging.debug("  Ordering cells in pseudotime via order_cells(...)")
+                pseudotime = order_cells(
+                    umap, centroids, mst=mst,
+                    projected_points=projected_points, root_cells=0
+                )
+                adata_ct.obs['pseudotime'] = pseudotime
+                logging.debug("  Pseudotime assigned to adata_ct.obs")
+
+                # 5) Plot pseudotime scatter + MST edges
+                plt.figure(figsize=(8, 6))
+                plt.title(f"Principal graph + sample‐centroids ({cell_type})")
+
+                scatter_plot = plt.scatter(
+                    umap[:, 0], umap[:, 1], c=pseudotime,
+                    s=1, cmap=cmap_custom, rasterized=True
+                )
+
+                edges = np.array(mst.nonzero()).T
+                for edge in edges:
+                    x0, y0 = centroids[edge[0], 0], centroids[edge[0], 1]
+                    x1, y1 = centroids[edge[1], 0], centroids[edge[1], 1]
+                    plt.plot([x0, x1], [y0, y1], c="black", linewidth=1)
+
+                # Compute sample centroids with tumor_stage
+                df_umap = pd.DataFrame(umap, columns=['UMAP1', 'UMAP2'], index=adata_ct.obs_names)
+                df_umap['sample'] = adata_ct.obs['sample'].values
+                df_umap['tumor_stage'] = adata_ct.obs['tumor_stage'].values
+                df_umap = df_umap.dropna(subset=['tumor_stage'])
+
+                def mode_or_first(x):
+                    m = x.mode()
+                    return m.iloc[0] if len(m) > 0 else x.iloc[0]
+
+                centroid_df = (
+                    df_umap.groupby('sample')
+                        .agg({'UMAP1': 'mean', 'UMAP2': 'mean', 'tumor_stage': mode_or_first})
+                        .reset_index()
+                )
+
+                # Explicit color mapping for tumor stages
+                stage_colors = {
+                    'non-cancer': '#84A970',
+                    'early': '#E4C282',
+                    'advanced': '#FF8C00'
+                }
+
+                # Overlay centroids colored by tumor_stage
+                for _, row in centroid_df.iterrows():
+                    stg = row['tumor_stage']
+                    plt.scatter(
+                        row['UMAP1'], row['UMAP2'],
+                        c=stage_colors.get(stg, 'black'), s=30,
+                        edgecolors='none', marker='o', zorder=10
+                    )
+
+                # Legend
+                legend_patches = [mpatches.Patch(color=col, label=stg)
+                                for stg, col in stage_colors.items()]
+                plt.legend(handles=legend_patches, title='Tumor stage', loc='best', frameon=True)
+
+                plt.xticks([])
+                plt.yticks([])
+
+                cbar = plt.colorbar(scatter_plot)
+                cbar.set_label('Pseudotime')
+
+                figpath = trajectory_dir / f"trajectory_{cell_type.replace(' ', '_')}_with_centroids.png"
+                logging.debug(f"  Saving figure to {figpath}")
+                plt.savefig(figpath, dpi=300, bbox_inches='tight')
+                plt.close()
+                logging.debug("  Figure saved and closed")
+
+                results[cell_type] = adata_ct
+                logging.debug(f"Finished processing cell_type = '{cell_type}'")
+
+            except Exception as e:
+                logging.error(f"  Error processing {cell_type}: {e}")
+                continue
+
+        logging.debug("=== END monocle_per_celltype ===")
+        return results
