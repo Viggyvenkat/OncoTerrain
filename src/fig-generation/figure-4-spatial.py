@@ -18,9 +18,7 @@ import seaborn as sns
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# ----------------------------
-# LOGGING SETUP
-# ----------------------------
+
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -31,33 +29,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ----------------------------
-# SPATIAL ANALYTICS
-# ----------------------------
-
 def get_disease_status(sample_name):
-    """
-    Determine disease status based on sample folder name.
-    
-    Args:
-        sample_name (str): Name of the sample folder
-    
-    Returns:
-        str: 'non-cancer' or 'cancer'
-    """
-    # Convert to uppercase for case-insensitive matching
     sample_upper = sample_name.upper()
     
-    # Check for specific non-cancer samples
     non_cancer_patterns = ['D1_1', 'D1_2', 'D2_1', 'D2_2']
     if any(pattern in sample_upper for pattern in non_cancer_patterns):
         return 'non-cancer'
     
-    # Check for B1 or B2 patterns (also non-cancer)
     if 'B1' in sample_upper or 'B2' in sample_upper:
         return 'non-cancer'
     
-    # All others are cancer
     return 'cancer'
 
 def rename_spatial_files(root_dir):
@@ -96,14 +77,9 @@ def load_and_preprocess_spatial_data(root_dir):
                 sc.pp.log1p(adata)
                 sc.pp.highly_variable_genes(adata, flavor="seurat", n_top_genes=2000, inplace=True)
                 
-                # Add disease status to metadata
                 disease_status = get_disease_status(sample_folder)
                 adata.obs['disease_status'] = disease_status
-                
-                # Also add sample name for reference
                 adata.obs['sample_name'] = sample_folder
-                
-                # Store in uns for easy access
                 adata.uns['disease_status'] = disease_status
                 adata.uns['sample_name'] = sample_folder
                 
@@ -121,7 +97,6 @@ def integrate_and_cluster_spatial(adatas, output_path):
     sc.tl.umap(adata_spatial)
     sc.tl.leiden(adata_spatial, key_added="clusters", n_iterations=2, flavor="igraph")
 
-    # Create plots including disease status
     fig, axes = plt.subplots(1, 3, figsize=(18, 6))
     
     sc.pl.umap(
@@ -158,7 +133,6 @@ def integrate_and_cluster_spatial(adatas, output_path):
     return adata_spatial
 
 def make_custom_cmap(color):
-    """Create a cmap that is gray from 0 to 0.5 and then blends to 'color' from 0.5 to 1"""
     return mcolors.LinearSegmentedColormap.from_list(
         "", 
         [(0.0, "gray"), (0.5, "gray"), (1.0, color)]
@@ -185,24 +159,18 @@ def plot_spatial_gene_sets(adatas, output_dir):
     }
 
     for i, adata in enumerate(adatas):
-        # Get sample name and disease status
         sample_name = adata.uns.get("sample_name", f"sample_{i}")
         disease_status = adata.uns.get("disease_status", "unknown")
         
-        # Create sample-specific directory with disease status
         sample_dir = os.path.join(output_dir, f"{sample_name}_{disease_status}")
         os.makedirs(sample_dir, exist_ok=True)
         
-        # Iterate through each gene set
         for set_idx, genes in enumerate(gene_sets):
             genes_present = [g for g in genes if g in adata.var_names]
             
             if genes_present:
-                # Plot each gene individually
                 for gene in genes_present:
                     fig, ax = plt.subplots(1, 1, figsize=(8, 8))
-                    
-                    # Get color scheme for this gene, default to gray to black if not specified
                     cmap = gene_colors.get(gene, mcolors.LinearSegmentedColormap.from_list("", ["gray", "gray", "black"]))
                     
                     sc.pl.spatial(
@@ -220,7 +188,6 @@ def plot_spatial_gene_sets(adatas, output_dir):
                     ax.set_title(f"{gene} - {sample_name} ({disease_status})")
                     plt.tight_layout()
                     
-                    # Save individual gene plot
                     gene_output_file = os.path.join(sample_dir, f"{gene}_spatial.png")
                     plt.savefig(gene_output_file, dpi=300, bbox_inches='tight')
                     plt.close()
@@ -228,7 +195,6 @@ def plot_spatial_gene_sets(adatas, output_dir):
                     logger.debug(f"Saved spatial plot for {gene} to {gene_output_file}")
             
             else:
-                # Log missing genes
                 logger.warning(f"Genes not found in {sample_name} ({disease_status}): {', '.join(genes)}")
         
         logger.info(f"Completed spatial gene plots for sample {sample_name} ({disease_status})")
@@ -239,7 +205,6 @@ def calculate_spatial_correlations(adatas, gene_sets, output_dir):
     
     correlation_records = []
     
-    # 1. Compute correlations using anchor gene
     for adata in adatas:
         sample_name = adata.uns.get("sample_name", "unknown")
         disease_status = adata.uns.get("disease_status", "unknown")
@@ -250,7 +215,6 @@ def calculate_spatial_correlations(adatas, gene_sets, output_dir):
             anchor_gene = genes[0]
             target_genes = genes[1:]
             
-            # Check anchor gene present
             if anchor_gene not in adata.var_names:
                 logger.warning(f"Anchor gene {anchor_gene} missing in {sample_name}. Skipping.")
                 continue
@@ -274,18 +238,15 @@ def calculate_spatial_correlations(adatas, gene_sets, output_dir):
                     'correlation': corr
                 })
     
-    # 2. Create DataFrame
     results_df = pd.DataFrame(correlation_records)
     if results_df.empty:
         logger.warning("No correlation data computed.")
         return results_df
     
-    # Save data
     results_file = os.path.join(output_dir, "spatial_anchor_correlations.csv")
     results_df.to_csv(results_file, index=False)
     logger.info(f"Saved correlation data to {results_file}")
     
-    # 3. Generate plots
     for gene_set in results_df['gene_set'].unique():
         set_df = results_df[results_df['gene_set'] == gene_set]
         anchor_gene = set_df['anchor_gene'].iloc[0]
@@ -331,7 +292,6 @@ def calculate_spatial_correlations(adatas, gene_sets, output_dir):
             ax.set_xlabel("")
             ax.set_ylabel("Correlation")
         
-        # Hide unused axes
         for j in range(idx + 1, n_rows * n_cols):
             row, col = divmod(j, n_cols)
             axes[row][col].axis('off')
@@ -344,7 +304,6 @@ def calculate_spatial_correlations(adatas, gene_sets, output_dir):
         
         logger.info(f"Saved plot for {gene_set} to {plot_file}")
     
-    # 4. Summary statistics
     logger.info("\nSpatial Correlation Summary:")
     logger.info("-" * 50)
     for gene_set in results_df['gene_set'].unique():
@@ -360,7 +319,6 @@ def calculate_spatial_correlations(adatas, gene_sets, output_dir):
     return results_df
 
 def print_sample_metadata(adatas):
-    """Print a summary of all samples and their disease status"""
     logger.info("Sample Metadata Summary:")
     logger.info("-" * 50)
     
@@ -388,20 +346,14 @@ def print_sample_metadata(adatas):
     logger.info(f"Cancer samples: {cancer_count}")
     logger.info(f"Non-cancer samples: {non_cancer_count}")
 
-# ----------------------------
-# MAIN PIPELINE
-# ----------------------------
-
 if __name__ == "__main__":
     logger.debug("Starting spatial analytics with disease status annotation.")
     root_dir = "data/spatial-data/Zuanietal"
     rename_spatial_files(root_dir)
     adatas = load_and_preprocess_spatial_data("data/spatial-data")
     
-    # Print sample metadata summary
     print_sample_metadata(adatas)
     
-    # Define gene sets for correlation analysis
     gene_sets = [
         ["MIF", "CD74", "CXCR4"],
         ["MIF", "CD74", "CD44"],
@@ -409,10 +361,8 @@ if __name__ == "__main__":
         ["PPIA", "BSG"]
     ]
     
-    # Calculate spatial correlations and create box plots
     correlation_results = calculate_spatial_correlations(adatas, gene_sets, "figures/spatial_correlations")
     
-    # Uncomment to run integration and clustering
     # adata_spatial = integrate_and_cluster_spatial(adatas, "figures/spatial_library_id.png")
     
     plot_spatial_gene_sets(adatas, "figures/spatial_gene_sets")

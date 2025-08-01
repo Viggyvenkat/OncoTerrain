@@ -72,7 +72,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from TMEGPT.OncoTerrain import OncoTerrain
+from preprocessing.OncoTerrain import OncoTerrain
 
 np.random.seed(42)
 logging.basicConfig(level=logging.INFO)

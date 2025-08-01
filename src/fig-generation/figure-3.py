@@ -16,7 +16,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='[%(asctime)s] %(levelname)s:%(message)s',
     handlers=[
-        logging.StreamHandler(sys.stdout)  # or sys.stderr if preferred
+        logging.StreamHandler(sys.stdout) 
     ]
 )
 
@@ -30,14 +30,8 @@ EPITHELIAL_CATS = [
 ]
 
 def __figure_three_A(adata, save_path=None):
-    """
-    Plot UMAP embedding of adata, highlighting non-epithelial cell types in color,
-    graying out epithelial types, and saving the figure as a high-quality image.
-    """
-
     orig = adata.obs['leiden_res_20.00_celltype'].cat.add_categories(['Other'])
     
-    # Build a new 'highlight' column: keep labels not in EPITHELIAL_CATS, else 'Other'
     adata.obs['highlight'] = (
         orig
         .where(~orig.isin(EPITHELIAL_CATS), other='Other')
@@ -45,23 +39,18 @@ def __figure_three_A(adata, save_path=None):
         .remove_unused_categories()
     )
 
-    # Determine the actual non-epithelial categories to color
     non_epi = [cat for cat in adata.obs['highlight'].cat.categories if cat != 'Other']
 
-    # Choose a base palette
     base_pal = sc.pl.palettes.default_20
-    # If there are more categories than the palette size, tile it
     if len(non_epi) > len(base_pal):
         palette_vals = plt.cm.tab20.colors * ((len(non_epi) // len(base_pal)) + 1)
     else:
         palette_vals = base_pal
 
-    # Map each non-epithelial category to a distinct color; 'Other' (epithelial) is light gray
     palette = {cat: palette_vals[i] for i, cat in enumerate(non_epi)}
     palette['Other'] = '#d3d3d3'
     
     plt.figure(figsize=(15, 8))
-    # Plot UMAP
     sc.pl.umap(
         adata,
         color='highlight',
@@ -73,7 +62,6 @@ def __figure_three_A(adata, save_path=None):
     )
     plt.tight_layout(rect=[0, 0, 0.8, 1]) 
 
-    # Handle save path
     if save_path is None:
         figures_dir = Path.cwd() / 'figures'
         figures_dir.mkdir(parents=True, exist_ok=True)
@@ -85,17 +73,8 @@ def __figure_three_A(adata, save_path=None):
     plt.savefig(save_path, dpi=300, bbox_inches='tight', pad_inches=0.3)
     plt.close()
 
-
-# ensure learn_graph and order_cells are in scope:
-# from your_monocle_module import learn_graph, order_cells
-
 def __figure_three_C(adata, save_path=None):
-    """
-    Run Monocle pseudotime on T cells, plot UMAP colored by pseudotime (gray→purple),
-    and overlay sample-centroids colored by tumor_stage.
-    """
     logging.debug("=== START __figure_three_C ===")
-    # 1) Subset to the three T‐cell clusters
     t_cells = adata[
         adata.obs['leiden_res_20.00_celltype']
         .isin(['CD8 T cells', 'CD4 T cells', 'T cells proliferating'])
@@ -104,7 +83,6 @@ def __figure_three_C(adata, save_path=None):
 
     t_cells.obs['tumor_stage'] = t_cells.obs['tumor_stage'].replace(['nan', 'NaN', 'NAN'], np.nan)
 
-    # Thorough NaN investigation for tumor_stage
     dist_pre = t_cells.obs['tumor_stage'].value_counts(dropna=False)
     logging.debug(f"tumor_stage distribution before drop (incl NaN/strings):\n{dist_pre}")
 
@@ -115,11 +93,9 @@ def __figure_three_C(adata, save_path=None):
         logging.debug(f"Dropping {n_missing} cells with missing tumor_stage")
         t_cells = t_cells[mask, :].copy()
 
-    # Check post-drop distribution
     dist_post = t_cells.obs['tumor_stage'].value_counts(dropna=False)
     logging.debug(f"tumor_stage distribution after drop (incl NaN):\n{dist_post}")
 
-    # 2) HVG selection (top 5000)
     sc.pp.highly_variable_genes(
         t_cells,
         n_top_genes=5000,
@@ -130,15 +106,12 @@ def __figure_three_C(adata, save_path=None):
     t_cells = t_cells[:, t_cells.var['highly_variable']].copy()
     logging.debug(f"After HVG subset: {t_cells.n_vars} genes")
 
-    # 3) Neighbors & UMAP
     umap = t_cells.obsm['X_umap']
 
-    # 4) Ensure a clustering exists for learn_graph
     if 'leiden' not in t_cells.obs:
         sc.tl.leiden(t_cells, key_added='leiden')
     clusters = pd.to_numeric(t_cells.obs['leiden'], errors='coerce').fillna(-1).astype(int).values
 
-    # 5) Learn principal graph & pseudotime
     projected_pts, mst, centroids = learn_graph(matrix=umap, clusters=clusters)
     pseudotime = order_cells(
         umap,
@@ -150,13 +123,11 @@ def __figure_three_C(adata, save_path=None):
     t_cells.obs['pseudotime'] = pseudotime
     logging.debug("Pseudotime computed")
 
-    # 6) Build gray→purple colormap
     cmap_gray_purple = LinearSegmentedColormap.from_list(
         'gray_purple',
         ['gray', 'purple']
     )
 
-    # 7) Scatter UMAP colored by pseudotime
     plt.figure(figsize=(8, 6))
     scatter = plt.scatter(
         umap[:, 0],
@@ -167,15 +138,11 @@ def __figure_three_C(adata, save_path=None):
         rasterized=True
     )
 
-    # 8) Compute and overlay sample-centroids colored by tumor_stage
-    # Build a DataFrame with UMAP coords + sample + tumor_stage
     df_umap = pd.DataFrame(umap, columns=['UMAP1', 'UMAP2'], index=t_cells.obs_names)
     df_umap['sample'] = t_cells.obs['sample'].values
     df_umap['tumor_stage'] = t_cells.obs['tumor_stage'].values
-    # Drop cells missing tumor_stage
     df_umap = df_umap.dropna(subset=['tumor_stage'])
 
-    # Function to choose the modal stage per sample
     def mode_or_first(x):
         m = x.mode()
         return m.iloc[0] if len(m) > 0 else x.iloc[0]
@@ -203,7 +170,6 @@ def __figure_three_C(adata, save_path=None):
             zorder=10
         )
 
-    # Final plot tweaks
     plt.xticks([])
     plt.yticks([])
     plt.title('T-cell trajectory pseudotime\n(with sample-centroids by tumor stage)')
@@ -211,7 +177,6 @@ def __figure_three_C(adata, save_path=None):
     cbar.set_label('Pseudotime')
     plt.tight_layout()
 
-    # 9) Save figure
     if save_path is None:
         figures_dir = Path.cwd() / 'figures'
         figures_dir.mkdir(parents=True, exist_ok=True)
@@ -228,12 +193,7 @@ def __figure_three_C(adata, save_path=None):
     return t_cells
 
 def __figure_three_D(adata, save_path=None):
-    """
-    Run Monocle pseudotime on macrophages, plot UMAP colored by pseudotime (gray→purple),
-    and overlay sample-centroids colored by tumor_stage.
-    """
     logging.debug("=== START __figure_three_E ===")
-    # 1) Subset to the specified macrophage clusters
     mphage_cells = adata[
         adata.obs['leiden_res_20.00_celltype']
         .isin([
@@ -248,7 +208,6 @@ def __figure_three_D(adata, save_path=None):
 
     mphage_cells.obs['tumor_stage'] = mphage_cells.obs['tumor_stage'].replace(['nan', 'NaN', 'NAN'], np.nan)
 
-    # Thorough NaN investigation for tumor_stage
     dist_pre = mphage_cells.obs['tumor_stage'].value_counts(dropna=False)
     logging.debug(f"tumor_stage distribution before drop (incl NaN/strings):\n{dist_pre}")
 
@@ -259,11 +218,9 @@ def __figure_three_D(adata, save_path=None):
         logging.debug(f"Dropping {n_missing} cells with missing tumor_stage")
         mphage_cells = mphage_cells[mask, :].copy()
 
-    # Check post-drop distribution
     dist_post = mphage_cells.obs['tumor_stage'].value_counts(dropna=False)
     logging.debug(f"tumor_stage distribution after drop (incl NaN):\n{dist_post}")
 
-    # 2) HVG selection (top 5000)
     sc.pp.highly_variable_genes(
         mphage_cells,
         n_top_genes=5000,
@@ -274,10 +231,8 @@ def __figure_three_D(adata, save_path=None):
     mphage_cells = mphage_cells[:, mphage_cells.var['highly_variable']].copy()
     logging.debug(f"After HVG subset: {mphage_cells.n_vars} genes")
 
-    # 3) Neighbors & UMAP
     umap = mphage_cells.obsm['X_umap']
 
-    # 4) Ensure a clustering exists for learn_graph
     if 'leiden' not in mphage_cells.obs:
         sc.tl.leiden(mphage_cells, key_added='leiden')
     clusters = pd.to_numeric(
@@ -285,7 +240,6 @@ def __figure_three_D(adata, save_path=None):
         errors='coerce'
     ).fillna(-1).astype(int).values
 
-    # 5) Learn principal graph & pseudotime
     projected_pts, mst, centroids = learn_graph(matrix=umap, clusters=clusters)
     pseudotime = order_cells(
         umap,
@@ -297,13 +251,11 @@ def __figure_three_D(adata, save_path=None):
     mphage_cells.obs['pseudotime'] = pseudotime
     logging.debug("Pseudotime computed")
 
-    # 6) Build gray→purple colormap
     cmap_gray_purple = LinearSegmentedColormap.from_list(
         'gray_purple',
         ['gray', 'purple']
     )
 
-    # 7) Scatter UMAP colored by pseudotime
     plt.figure(figsize=(8, 6))
     scatter = plt.scatter(
         umap[:, 0],
@@ -314,7 +266,6 @@ def __figure_three_D(adata, save_path=None):
         rasterized=True
     )
 
-    # 8) Compute and overlay sample-centroids colored by tumor_stage
     df_umap = pd.DataFrame(umap, columns=['UMAP1', 'UMAP2'], index=mphage_cells.obs_names)
     df_umap['sample'] = mphage_cells.obs['sample'].values
     df_umap['tumor_stage'] = mphage_cells.obs['tumor_stage'].values
@@ -357,7 +308,6 @@ def __figure_three_D(adata, save_path=None):
     cbar.set_label('Pseudotime')
     plt.tight_layout()
 
-    # 9) Save figure
     if save_path is None:
         figures_dir = Path.cwd() / 'figures'
         figures_dir.mkdir(parents=True, exist_ok=True)
@@ -374,12 +324,7 @@ def __figure_three_D(adata, save_path=None):
     return mphage_cells
 
 def __figure_three_E(adata, save_path=None):
-    """
-    Run Monocle pseudotime on fibroblasts, plot UMAP colored by pseudotime (gray→purple),
-    and overlay sample-centroids colored by tumor_stage.
-    """
     logging.debug("=== START __figure_three_G ===")
-    # 1) Subset to the specified fibroblast clusters
     fibroblast_cells = adata[
         adata.obs['leiden_res_20.00_celltype']
         .isin([
@@ -394,7 +339,6 @@ def __figure_three_E(adata, save_path=None):
     logging.debug(f"Subset to fibroblasts: {fibroblast_cells.n_obs} cells")
 
     fibroblast_cells.obs['tumor_stage'] = fibroblast_cells.obs['tumor_stage'].replace(['nan', 'NaN', 'NAN'], np.nan)
-    # Thorough NaN investigation for tumor_stage
     dist_pre = fibroblast_cells.obs['tumor_stage'].value_counts(dropna=False)
     logging.debug(f"tumor_stage distribution before drop (incl NaN/strings):\n{dist_pre}")
     mask = fibroblast_cells.obs['tumor_stage'].notna()
@@ -403,11 +347,9 @@ def __figure_three_E(adata, save_path=None):
     if n_missing > 0:
         logging.debug(f"Dropping {n_missing} cells with missing tumor_stage")
         fibroblast_cells = fibroblast_cells[mask, :].copy()
-    # Check post-drop distribution
     dist_post = fibroblast_cells.obs['tumor_stage'].value_counts(dropna=False)
     logging.debug(f"tumor_stage distribution after drop (incl NaN):\n{dist_post}")
 
-    # 2) HVG selection (top 5000)
     sc.pp.highly_variable_genes(
         fibroblast_cells,
         n_top_genes=5000,
@@ -418,10 +360,8 @@ def __figure_three_E(adata, save_path=None):
     fibroblast_cells = fibroblast_cells[:, fibroblast_cells.var['highly_variable']].copy()
     logging.debug(f"After HVG subset: {fibroblast_cells.n_vars} genes")
 
-    # 3) Neighbors & UMAP
     umap = fibroblast_cells.obsm['X_umap']
 
-    # 4) Ensure a clustering exists for learn_graph
     if 'leiden' not in fibroblast_cells.obs:
         sc.tl.leiden(fibroblast_cells, key_added='leiden')
     clusters = pd.to_numeric(
@@ -429,7 +369,6 @@ def __figure_three_E(adata, save_path=None):
         errors='coerce'
     ).fillna(-1).astype(int).values
 
-    # 5) Learn principal graph & pseudotime
     projected_pts, mst, centroids = learn_graph(matrix=umap, clusters=clusters)
     pseudotime = order_cells(
         umap,
@@ -441,13 +380,11 @@ def __figure_three_E(adata, save_path=None):
     fibroblast_cells.obs['pseudotime'] = pseudotime
     logging.debug("Pseudotime computed")
 
-    # 6) Build gray→purple colormap
     cmap_gray_purple = LinearSegmentedColormap.from_list(
         'gray_purple',
         ['gray', 'purple']
     )
 
-    # 7) Scatter UMAP colored by pseudotime
     plt.figure(figsize=(8, 6))
     scatter = plt.scatter(
         umap[:, 0],
@@ -458,7 +395,6 @@ def __figure_three_E(adata, save_path=None):
         rasterized=True
     )
 
-    # 8) Compute and overlay sample-centroids colored by tumor_stage
     df_umap = pd.DataFrame(umap, columns=['UMAP1', 'UMAP2'], index=fibroblast_cells.obs_names)
     df_umap['sample'] = fibroblast_cells.obs['sample'].values
     df_umap['tumor_stage'] = fibroblast_cells.obs['tumor_stage'].values
@@ -494,7 +430,6 @@ def __figure_three_E(adata, save_path=None):
             zorder=10
         )
 
-    # Final plot tweaks
     plt.xticks([])
     plt.yticks([])
     plt.title('Fibroblast trajectory pseudotime\n(with sample-centroids by tumor stage)')
@@ -502,7 +437,6 @@ def __figure_three_E(adata, save_path=None):
     cbar.set_label('Pseudotime')
     plt.tight_layout()
 
-    # 9) Save figure
     if save_path is None:
         figures_dir = Path.cwd() / 'figures'
         figures_dir.mkdir(parents=True, exist_ok=True)
@@ -519,7 +453,6 @@ def __figure_three_E(adata, save_path=None):
     return fibroblast_cells
 
 def __figure_three_F_1(adata, save_dir=None):
-    from pathlib import Path
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -589,7 +522,6 @@ def __figure_three_F_1(adata, save_dir=None):
         plt.close(fig)
     
 def __figure_three_F_2(adata, save_dir=None):
-    from pathlib import Path
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -664,7 +596,6 @@ def __figure_three_F_2(adata, save_dir=None):
         plt.close(fig)
 
 def __figure_three_F_3(adata, save_dir=None):
-    from pathlib import Path
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -751,20 +682,17 @@ def __figure_three_G(adata, save_path = None):
         'advanced':   '#FF8C00'
     }
 
-    # Extract the relevant data and drop missing stages
     df = (
         adata.obs
         .loc[:, ['tumor_stage', 'HALLMARK_IL6_JAK_STAT3_SIGNALING']]
         .dropna(subset=['tumor_stage'])
     )
 
-    # Build a list of arrays, one per stage (in the defined order)
     data_by_stage = [
         df.loc[df['tumor_stage'] == st, 'HALLMARK_IL6_JAK_STAT3_SIGNALING'].values
         for st in stages
     ]
 
-    # Create the boxplot
     fig, ax = plt.subplots(figsize=(6, 6))
     bp = ax.boxplot(
         data_by_stage,
@@ -774,18 +702,15 @@ def __figure_three_G(adata, save_path = None):
         showfliers=False
     )
 
-    # Color each box
     for patch, st in zip(bp['boxes'], stages):
         patch.set_facecolor(stage_colors[st])
         patch.set_edgecolor('black')
 
-    # Tidy up axes
     ax.set_xticks(range(1, len(stages) + 1))
     ax.set_xticklabels(stages, rotation=30)
     ax.set_ylabel('HALLMARK_IL6_JAK_STAT score')
     ax.set_title('IL6/JAK/STAT pathway activity by tumor stage')
 
-    # Add a legend for colors
     legend_handles = [Patch(facecolor=stage_colors[st], label=st) for st in stages]
     ax.legend(
         handles=legend_handles,
@@ -796,7 +721,6 @@ def __figure_three_G(adata, save_path = None):
 
     plt.tight_layout()
 
-    # Save or show
     if save_path is not None:
         save_path = Path(save_path)
         save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -825,8 +749,6 @@ def __figure_three_H(adata, save_path = None):
         'advanced':   '#FF8C00'
     }
 
-    # Extract FAP expression and tumor_stage
-    # handle sparse vs dense
     fap_raw = fibroblast_cells[:, 'FAP'].X
     try:
         fap_vals = fap_raw.toarray().flatten()
@@ -838,7 +760,6 @@ def __figure_three_H(adata, save_path = None):
         'tumor_stage': fibroblast_cells.obs['tumor_stage'].values
     }).dropna(subset=['tumor_stage'])
 
-    # Compute percentages
     pct_expressing = []
     for st in stages:
         sub = df[df['tumor_stage'] == st]
@@ -848,7 +769,6 @@ def __figure_three_H(adata, save_path = None):
             pct = (sub['FAP'] > 0).sum() / len(sub) * 100
         pct_expressing.append(pct)
 
-    # Plot
     fig, ax = plt.subplots(figsize=(6, 5))
     bars = ax.bar(
         stages,
@@ -871,7 +791,6 @@ def __figure_three_H(adata, save_path = None):
 
     plt.tight_layout()
 
-    # Save or show
     if save_path is not None:
         save_path = Path(save_path)
         save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -881,7 +800,6 @@ def __figure_three_H(adata, save_path = None):
         plt.show()
 
 def __figure_three_I(adata, save_path=None):
-    # 1. Subset T cells
     t_cells = adata[
         adata.obs['leiden_res_20.00_celltype']
         .isin(['CD8 T cells', 'CD4 T cells', 'T cells proliferating'])
@@ -889,13 +807,11 @@ def __figure_three_I(adata, save_path=None):
     t_cells.obs['tumor_stage'] = t_cells.obs['tumor_stage'].replace(['nan', 'NaN', 'NAN'], np.nan)
     t_cells = t_cells[~t_cells.obs['tumor_stage'].isna()].copy()
 
-    # 2. Define genes
     genes = ['STAT4', 'CCR7', 'LAG3']
     for gene in genes:
         if gene not in t_cells.var_names:
             raise ValueError(f"Gene '{gene}' not found in adata.")
 
-    # 3. Extract expression and compute medians
     expr_data = {
         gene: t_cells[:, gene].X.toarray().flatten()
         if hasattr(t_cells[:, gene].X, 'toarray') else np.array(t_cells[:, gene].X).flatten()
@@ -903,7 +819,6 @@ def __figure_three_I(adata, save_path=None):
     }
     medians = {gene: np.median(expr_data[gene]) for gene in genes}
 
-    # 4. Generate phenotype strings per cell (with no underscores)
     def get_phenotype(i):
         return ''.join([
             f"{g}{'+' if expr_data[g][i] > medians[g] else '-'}"
@@ -912,7 +827,6 @@ def __figure_three_I(adata, save_path=None):
 
     t_cells.obs['phenotype'] = [get_phenotype(i) for i in range(t_cells.n_obs)]
 
-    # 5. Compute percentages per tumor stage
     stages = ['non-cancer', 'early', 'advanced']
     all_phenos = sorted(t_cells.obs['phenotype'].unique())
     stage_pct_df = pd.DataFrame(index=all_phenos, columns=stages)
@@ -928,7 +842,6 @@ def __figure_three_I(adata, save_path=None):
     logging.info("Phenotype breakdown for Figure 3I:\n%s", stage_pct_df.applymap(lambda x: f"{x:.1f}%").to_string())
 
 
-    # 6. Plot stacked bars with enhancements
     cmap = cm.get_cmap('tab20', len(all_phenos))
     colors = [cmap(i) for i in range(len(all_phenos))]
 
@@ -948,7 +861,6 @@ def __figure_three_I(adata, save_path=None):
         )
         bottom += vals
 
-    # Axis styling
     ax.set_ylabel('Percentage of T cells')
     ax.set_title('T-cell phenotypes by tumor stage\n(> median expression of STAT4, CCR7, LAG3)')
     ax.set_ylim(0, 100)
@@ -958,7 +870,6 @@ def __figure_three_I(adata, save_path=None):
     ax.set_axisbelow(True)
     ax.yaxis.grid(True, linestyle='--', linewidth=0.5, alpha=0.5)
 
-    # 7. Elegant circular legend without box
     legend_handles = [
         Line2D(
             [0], [0],
@@ -984,7 +895,6 @@ def __figure_three_I(adata, save_path=None):
 
     plt.tight_layout()
 
-    # 8. Save or show
     if save_path is not None:
         save_path = Path(save_path)
         save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -995,7 +905,6 @@ def __figure_three_I(adata, save_path=None):
 
 def __figure_three_J(adata, save_path=None):
 
-    # 1. Subset myeloid cells
     myeloid = adata[
         adata.obs['leiden_res_20.00_celltype']
         .isin([
@@ -1010,13 +919,11 @@ def __figure_three_J(adata, save_path=None):
     myeloid.obs['tumor_stage'] = myeloid.obs['tumor_stage'].replace(['nan', 'NaN', 'NAN'], np.nan)
     myeloid = myeloid[~myeloid.obs['tumor_stage'].isna()].copy()
 
-    # 2. Define genes
     genes = ['CD68', 'CD86', 'CD163']
     for gene in genes:
         if gene not in myeloid.var_names:
             raise ValueError(f"Gene '{gene}' not found in adata.")
 
-    # 3. Extract expression and compute medians
     expr_data = {
         gene: myeloid[:, gene].X.toarray().flatten()
         if hasattr(myeloid[:, gene].X, 'toarray') else np.array(myeloid[:, gene].X).flatten()
@@ -1024,7 +931,6 @@ def __figure_three_J(adata, save_path=None):
     }
     medians = {gene: np.median(expr_data[gene]) for gene in genes}
 
-    # 4. Phenotype strings
     def get_phenotype(i):
         return ''.join([
             f"{g}{'+' if expr_data[g][i] > medians[g] else '-'}"
@@ -1032,7 +938,6 @@ def __figure_three_J(adata, save_path=None):
         ])
     myeloid.obs['phenotype'] = [get_phenotype(i) for i in range(myeloid.n_obs)]
 
-    # 5. Percentages
     stages = ['non-cancer', 'early', 'advanced']
     all_phenos = sorted(myeloid.obs['phenotype'].unique())
     stage_pct_df = pd.DataFrame(index=all_phenos, columns=stages)
@@ -1046,7 +951,6 @@ def __figure_three_J(adata, save_path=None):
     stage_pct_df = stage_pct_df.fillna(0)
     logging.info("Phenotype breakdown for Figure 3J:\n%s", stage_pct_df.applymap(lambda x: f"{x:.1f}%").to_string())
 
-    # 6. Plot
     cmap = cm.get_cmap('tab20c', len(all_phenos))
     colors = [cmap(i) for i in range(len(all_phenos))]
 
@@ -1092,8 +996,6 @@ def __figure_three_J(adata, save_path=None):
         plt.show()
 
 def __figure_three_K(adata, save_path=None):
-
-    # 1. Subset fibroblasts
     fibro = adata[
         adata.obs['leiden_res_20.00_celltype']
         .isin([
@@ -1109,13 +1011,11 @@ def __figure_three_K(adata, save_path=None):
     fibro.obs['tumor_stage'] = fibro.obs['tumor_stage'].replace(['nan', 'NaN', 'NAN'], np.nan)
     fibro = fibro[~fibro.obs['tumor_stage'].isna()].copy()
 
-    # 2. Define genes
     genes = ['FAP', 'ACTA2', 'COL1A1']
     for gene in genes:
         if gene not in fibro.var_names:
             raise ValueError(f"Gene '{gene}' not found in adata.")
 
-    # 3. Extract expression and compute medians
     expr_data = {
         gene: fibro[:, gene].X.toarray().flatten()
         if hasattr(fibro[:, gene].X, 'toarray') else np.array(fibro[:, gene].X).flatten()
@@ -1123,7 +1023,6 @@ def __figure_three_K(adata, save_path=None):
     }
     medians = {gene: np.median(expr_data[gene]) for gene in genes}
 
-    # 4. Phenotype strings
     def get_phenotype(i):
         return ''.join([
             f"{g}{'+' if expr_data[g][i] > medians[g] else '-'}"
@@ -1131,7 +1030,6 @@ def __figure_three_K(adata, save_path=None):
         ])
     fibro.obs['phenotype'] = [get_phenotype(i) for i in range(fibro.n_obs)]
 
-    # 5. Percentages
     stages = ['non-cancer', 'early', 'advanced']
     all_phenos = sorted(fibro.obs['phenotype'].unique())
     stage_pct_df = pd.DataFrame(index=all_phenos, columns=stages)
@@ -1145,7 +1043,6 @@ def __figure_three_K(adata, save_path=None):
     stage_pct_df = stage_pct_df.fillna(0)
     logging.info("Phenotype breakdown for Figure 3K:\n%s", stage_pct_df.applymap(lambda x: f"{x:.1f}%").to_string())
 
-    # 6. Plot
     cmap = cm.get_cmap('tab10', len(all_phenos))
     colors = [cmap(i) for i in range(len(all_phenos))]
 
@@ -1192,12 +1089,6 @@ def __figure_three_K(adata, save_path=None):
 
 
 def __figure_three_L(adata, save_path=None):
-    import matplotlib.pyplot as plt
-    from pathlib import Path
-    import numpy as np
-    import scanpy as sc
-
-    # 1. Compute mean scores and binarize
     kras_mean = adata.obs["HALLMARK_KRAS_SIGNALING_UP"].mean()
     egfr_mean = adata.obs["REACTOME_SIGNALING_BY_EGFR_IN_CANCER"].mean()
     adata.obs["KRAS_high"] = adata.obs["HALLMARK_KRAS_SIGNALING_UP"] > kras_mean
@@ -1208,7 +1099,6 @@ def __figure_three_L(adata, save_path=None):
     print(f"REACTOME_SIGNALING_BY_EGFR_IN_CANCER mean = {egfr_mean:.3f}")
     print(adata.obs["EGFR_high"].value_counts())
 
-    # 2. Define group labels
     conditions = [
         (~adata.obs["KRAS_high"]) & (~adata.obs["EGFR_high"]),
         ( adata.obs["KRAS_high"]) & (~adata.obs["EGFR_high"]),
@@ -1218,7 +1108,6 @@ def __figure_three_L(adata, save_path=None):
     labels = ["Neither", "KRAS only", "EGFR only", "Both"]
     adata.obs["KRAS_EGFR_group"] = np.select(conditions, labels, default="Neither")
 
-    # 3. Subsets and genes
     subsets = {
         "Macrophages": (
             adata[adata.obs['leiden_res_20.00_celltype'].isin([
@@ -1238,7 +1127,6 @@ def __figure_three_L(adata, save_path=None):
         ),
     }
 
-    # 4. Plot 1x2 violins
     fig, axes = plt.subplots(1, 2, figsize=(10, 5), sharey=False)
 
     for ax, (title, (subset, gene)) in zip(axes, subsets.items()):
@@ -1259,7 +1147,6 @@ def __figure_three_L(adata, save_path=None):
 
     plt.tight_layout()
 
-    # 5. Save or show
     if save_path is not None:
         save_path = Path(save_path)
         save_path.parent.mkdir(parents=True, exist_ok=True)

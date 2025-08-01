@@ -41,7 +41,6 @@ def __figure_one_D(adata):
 def __figure_one_E(adata):
     cmap_custom = LinearSegmentedColormap.from_list('gray_emerald', ['gray', '#50C878'])
 
-    # Randomly select 4 genes that exist in the dataset
     available_genes = list(adata.var_names)
     genes = random.sample(available_genes, 4)
     print(f"Randomly selected genes: {genes}")
@@ -54,11 +53,11 @@ def __figure_one_E(adata):
             adata,
             color=gene,
             size=0.2,
-            sort_order=True,  # This ensures cells with higher expression appear on top
+            sort_order=True,
             cmap=cmap_custom,
             ax=axes[i],
             show=False,
-            colorbar_loc=None  # No colorbar in the loop
+            colorbar_loc=None 
         )
         axes[i].spines['top'].set_visible(False)
         axes[i].spines['right'].set_visible(False)
@@ -79,7 +78,6 @@ def __figure_one_E(adata):
         
         axes[i].tick_params(width=1.5)
 
-    # Add a single colorbar outside the loop
     expr = adata[:, genes[0]].X
     expr_arr = expr.toarray().flatten() if hasattr(expr, "toarray") else np.array(expr).flatten()
 
@@ -94,7 +92,6 @@ def __figure_one_E(adata):
     plt.close()
 
 def __figure_one_F(adata):
-    # Create a figure for the first subplot
     sc.pl.umap(
         adata,
         color='leiden_res_20.00_celltype',
@@ -118,18 +115,13 @@ def __figure_one_G(adata):
     disease_col = 'disease'
     celltype_col = 'leiden_res_20.00_celltype'
 
-    # Create pivot table of cell counts per disease per cell type
     pt = adata.obs.groupby([disease_col, celltype_col]).size().unstack(fill_value=0)
-
-    # Create fractions table (each row sums to 1)
     pt_frac = pt.div(pt.sum(axis=1), axis=0)
 
-    # Get the cell type colors and ensure the columns are in the correct order
     celltype_colors = adata.uns[f"{celltype_col}_colors"] 
     celltype_categories = adata.obs[celltype_col].cat.categories
     pt_frac = pt_frac.reindex(columns=celltype_categories)
 
-    # Plot the stacked bar plot
     ax = pt_frac.plot(
         kind='bar',
         stacked=True,
@@ -149,7 +141,6 @@ def __figure_one_G(adata):
 
     plt.title('Cell Type Fractions by Disease')
 
-    # Remove the legend entirely
     legend = ax.get_legend()
     if legend:
         legend.remove()
@@ -162,7 +153,6 @@ if __name__ == "__main__":
 
     adata = sc.read_h5ad(filename=str(BASE_DIR /'data/processed_data.h5ad'))
 
-    # Define the old-to-new mapping
     rename_dict = {
         'chronic obstructive pulmonary disease': 'COPD',
         'lung adenocarcinoma': 'LUAD',
@@ -171,10 +161,8 @@ if __name__ == "__main__":
         'squamous cell lung carcinoma': 'LUSC'
     }
 
-    # Apply the mapping
     adata.obs['disease'] = adata.obs['disease'].replace(rename_dict)
 
-    # Generating figures
     __figure_one_D(adata)
     __figure_one_E(adata)
     __figure_one_F(adata)
