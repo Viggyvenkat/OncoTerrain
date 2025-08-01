@@ -14,20 +14,40 @@ class OncoTerrain:
     BASE_DIR = Path.cwd()
 
     def __init__(self, adata=None):
+        """Initialize the OncoTerrain analyzer.
+        
+        Args:
+            adata (anndata.AnnData, optional): Annotated data matrix containing single-cell 
+                RNA sequencing data. Defaults to None.
+        """
+
         logging.info(f"Loading trained model from {self.BASE_DIR}")
         logging.basicConfig(level=logging.INFO)
 
         self.adata = adata
     
     def __preprocessing(self):
-        """
-        After merging, perform normalization, log1p, and compute QC metrics on the full union.
+        """Perform preprocessing steps on the single-cell RNA sequencing data.
+        
+        This method performs the following preprocessing steps:
+        - Converts indices to string format
+        - Identifies mitochondrial genes
+        - Calculates quality control metrics
+        - Filters cells and genes based on minimum thresholds
+        - Handles NaN values in the expression matrix
+        - Normalizes expression data to target sum
+        - Applies log1p transformation
+        
+        Returns:
+            anndata.AnnData: Preprocessed annotated data matrix.
+            
+        Raises:
+            AttributeError: If self.adata is None or improperly formatted.
         """
 
         self.adata.obs.index = self.adata.obs.index.astype(str)
         self.adata.var.index = self.adata.var.index.astype(str)
 
-        # Compute percent mitochondrial genes
         self.adata.var['mt'] = self.adata.var_names.str.startswith('MT-')
         sc.pp.calculate_qc_metrics(
             self.adata,
@@ -42,7 +62,6 @@ class OncoTerrain:
 
         self.adata.X.data = np.nan_to_num(self.adata.X.data)
 
-        # Normalize total counts per cell
         sc.pp.normalize_total(self.adata, target_sum=1e4)
         sc.pp.log1p(self.adata)
 
@@ -58,6 +77,23 @@ class OncoTerrain:
         return self.adata
     
     def __annotate_clusters_by_markers(self, adata, cluster_key, marker_dict):
+        """Annotate cell clusters based on marker gene expression.
+        
+        For each cluster, this method calculates the average expression of marker genes
+        for each cell type and assigns the cell type with the highest average expression.
+        
+        Args:
+            adata (anndata.AnnData): Annotated data matrix.
+            cluster_key (str): Column name in adata.obs containing cluster assignments.
+            marker_dict (dict): Dictionary mapping cell types to lists of marker genes.
+            
+        Returns:
+            dict: Dictionary mapping cluster IDs to cell type annotations.
+            
+        Raises:
+            KeyError: If cluster_key is not found in adata.obs.
+            ValueError: If marker genes are not found in adata.var_names.
+        """
         cluster2celltype = {}
         for cluster in adata.obs[cluster_key].unique():
             subset_adata = adata[adata.obs[cluster_key] == cluster]
@@ -78,6 +114,23 @@ class OncoTerrain:
         return cluster2celltype
 
     def __ct_annotation(self):
+        """Perform cell type annotation using clustering and marker genes.
+        
+        This method performs the following steps:
+        - Principal component analysis (PCA)
+        - K-nearest neighbors graph construction
+        - UMAP dimensionality reduction
+        - Leiden clustering at high resolution
+        - Cell type annotation based on marker gene expression
+        - Generation of visualization plots
+        
+        Returns:
+            anndata.AnnData: Annotated data matrix with cell type assignments.
+            
+        Raises:
+            OSError: If figure or data directories cannot be created.
+            ValueError: If clustering or annotation fails.
+        """
         logging.debug("Starting ct_annotation")
         os.makedirs("../figures", exist_ok=True)
         os.makedirs("../data", exist_ok=True)
@@ -184,37 +237,59 @@ class OncoTerrain:
         return self.adata
 
     def ___add_and_aggregate_module_scores(self, adata, gmt_file):
-            """
-            For the adata object add hallmark pathway supplied by gmt_file to the metadata for each cell.
-            """
-            gene_sets = gp.get_library(str(gmt_file))
-            adata_genes = [gene.upper() for gene in adata.var_names]
+        """Add module scores for gene sets from a GMT file to the AnnData object.
+        
+        This method calculates module scores for each gene set (pathway) in the GMT file
+        and adds them as new columns to the adata.obs dataframe.
+        
+        Args:
+            adata (anndata.AnnData): Annotated data matrix to which scores will be added.
+            gmt_file (str or Path): Path to GMT file containing gene sets.
             
-            for pathway, genes in gene_sets.items():
-                genes = [g.upper() for g in genes]
-                genes_in_adata = [gene for gene in genes if gene in adata_genes]
-                
-                if len(genes_in_adata) > 0:
-                    logging.info(f"Calculating module score for pathway: {pathway}")
-                    logging.info(f"Genes in pathway (after matching): {genes_in_adata}")
-                    sc.tl.score_genes(adata, genes_in_adata, score_name=pathway)
-                    if pathway in adata.obs.columns:
-                        score_col = pathway
-                    elif f"{pathway}_score" in adata.obs.columns:
-                        score_col = f"{pathway}_score"
-                    else:
-                        score_col = None
-                    if score_col:
-                        logging.info(f"Module score for {pathway} added to adata.obs as {score_col}")
-                    else:
-                        logging.info(f"Module score for {pathway} was not added to adata.obs")
+        Returns:
+            anndata.AnnData: Updated annotated data matrix with module scores added.
+            
+        Raises:
+            FileNotFoundError: If the GMT file cannot be found.
+            ValueError: If the GMT file format is invalid.
+        """
+        gene_sets = gp.get_library(str(gmt_file))
+        adata_genes = [gene.upper() for gene in adata.var_names]
+        
+        for pathway, genes in gene_sets.items():
+            genes = [g.upper() for g in genes]
+            genes_in_adata = [gene for gene in genes if gene in adata_genes]
+            
+            if len(genes_in_adata) > 0:
+                logging.info(f"Calculating module score for pathway: {pathway}")
+                logging.info(f"Genes in pathway (after matching): {genes_in_adata}")
+                sc.tl.score_genes(adata, genes_in_adata, score_name=pathway)
+                if pathway in adata.obs.columns:
+                    score_col = pathway
+                elif f"{pathway}_score" in adata.obs.columns:
+                    score_col = f"{pathway}_score"
                 else:
-                    logging.info(f"No genes found for pathway {pathway} in AnnData object")
-            return adata
+                    score_col = None
+                if score_col:
+                    logging.info(f"Module score for {pathway} added to adata.obs as {score_col}")
+                else:
+                    logging.info(f"Module score for {pathway} was not added to adata.obs")
+            else:
+                logging.info(f"No genes found for pathway {pathway} in AnnData object")
+        return adata
 
     def __hp_calculation(self):
-        """
-        Run code to generate hallmark pathway scores.
+        """Calculate hallmark pathway scores for all GMT files in the HallmarkPathGMT directory.
+        
+        This method processes all GMT files found in the HallmarkPathGMT directory and
+        calculates module scores for the gene sets contained within them.
+        
+        Returns:
+            anndata.AnnData: Updated annotated data matrix with hallmark pathway scores.
+            
+        Raises:
+            FileNotFoundError: If the HallmarkPathGMT directory is not found.
+            OSError: If GMT files cannot be read.
         """
         logging.debug("starting hp_calculation")
         gmt_dir = self.BASE_DIR / "HallmarkPathGMT"
@@ -226,6 +301,25 @@ class OncoTerrain:
         return self.adata
 
     def inferencing(self, save_path, save_adata=True):
+        """Run the complete OncoTerrain analysis pipeline and generate predictions.
+        
+        This method executes the full analysis pipeline including preprocessing,
+        cell type annotation, hallmark pathway calculation, and oncological terrain
+        classification using a trained machine learning model.
+        
+        Args:
+            save_path (str or Path): Directory path where results will be saved.
+            save_adata (bool, optional): Whether to save the annotated AnnData object.
+                Defaults to True.
+                
+        Returns:
+            None: Results are saved to the specified directory.
+            
+        Raises:
+            FileNotFoundError: If the trained model file 'OncoTerrain.joblib' is not found.
+            ValueError: If the data cannot be processed or predictions cannot be generated.
+            OSError: If the save directory cannot be created or written to.
+        """
         logging.info(f"Preprocessing dataset with shape: {self.adata.shape} and obs names: {self.adata.obs_names[:5]}")
         self.adata = self.__preprocessing()
         logging.info(f"After preprocessing dataset with shape: {self.adata.shape} and obs names: {self.adata.obs_names[:5]}")
@@ -270,9 +364,8 @@ class OncoTerrain:
             'Ionocyte': 54, 'Fibromyocytes': 55, 'Deuterosomal': 56, 'Tuft': 57
         }
 
-        # Create reverse mapping for human-readable labels
         reverse_celltype_map = {v: k for k, v in celltype_map.items()}
-        reverse_celltype_map[-1] = 'Unknown'  # For unmapped cell types
+        reverse_celltype_map[-1] = 'Unknown'
 
         mapped = meta_data['leiden_res_20.00_celltype'].astype(str).map(celltype_map)
 
@@ -283,7 +376,6 @@ class OncoTerrain:
         meta_data['leiden_res_20.00_celltype'] = mapped.fillna(-1).astype(int)
         celltype_data = meta_data['leiden_res_20.00_celltype'].copy()
         
-        # Convert numeric cell types back to human-readable labels for plotting
         celltype_labels = celltype_data.map(reverse_celltype_map)
 
         meta_data_X = meta_data.drop(['leiden_res_20.00_celltype'], axis=1)
@@ -291,7 +383,7 @@ class OncoTerrain:
         missing_cols = set(self.model_features) - set(meta_data_X.columns)
         for col in missing_cols:
             logging.info("Adding missing column: %s", col)
-            meta_data_X[col] = 0  # Add missing columns as 0
+            meta_data_X[col] = 0
 
         meta_data_X = meta_data_X[self.model_features]
 
@@ -309,17 +401,14 @@ class OncoTerrain:
         y_val_pred = self.OncoTerrain.predict(meta_data_X.values)
         color_palette = {0: "#84A970", 1: "#E4C282", 2: "#FF8C00"}
 
-        # Use a more manageable color palette - seaborn/matplotlib can handle this automatically
-        # or create a palette with distinct colors for the unique cell types present
         unique_celltypes = celltype_labels.unique()
-        import matplotlib.pyplot as plt
         colors = plt.cm.tab20(np.linspace(0, 1, len(unique_celltypes)))
         cell_type_color_map = dict(zip(unique_celltypes, colors))
 
         umap_model = umap.UMAP(n_neighbors=50, min_dist=0.05, metric='euclidean', random_state=42)
         X_val_umap = umap_model.fit_transform(meta_data_X)
 
-        plt.figure(figsize=(20, 10))  # Made wider to accommodate legend
+        plt.figure(figsize=(20, 10))
 
         plt.subplot(1, 2, 1)
         sns.scatterplot(x=X_val_umap[:, 0], y=X_val_umap[:, 1], hue=y_val_pred, palette=color_palette, s=10)
@@ -327,11 +416,9 @@ class OncoTerrain:
         plt.legend(loc='best')
 
         plt.subplot(1, 2, 2)
-        # Use human-readable cell type labels
         sns.scatterplot(x=X_val_umap[:, 0], y=X_val_umap[:, 1], hue=celltype_labels, s=10)
         plt.title('UMAP Projection - Cell Type', fontsize=14)
         
-        # Position legend outside the plot to avoid overcrowding
         plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=15)
 
         for ax in plt.gcf().axes:
@@ -343,13 +430,12 @@ class OncoTerrain:
 
         save_path = Path(save_path)
         save_path.mkdir(parents=True, exist_ok=True)
-        plt.tight_layout()  # Adjust layout to prevent legend cutoff
+        plt.tight_layout()
         plt.savefig(f"{save_path}/figure.png", dpi=300, bbox_inches='tight')
 
         class_labels = {0: 'Normal-like', 1: 'Pre-malignant', 2: 'Tumor-like'}
         self.adata.obs['oncoterrain_class'] = [class_labels[label] for label in y_val_pred]
         
-        # Also save human-readable cell type labels to adata
         self.adata.obs['celltype_readable'] = celltype_labels.values
 
         if save_adata:

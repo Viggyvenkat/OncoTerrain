@@ -24,8 +24,9 @@ from matplotlib.colors import LinearSegmentedColormap
 from scipy import sparse
 import matplotlib.patches as mpatches
 import matplotlib.colors as mcolors
+import glob
 
-# Define the base directory as the current working directory (top folder)
+
 BASE_DIR = Path.cwd()
 
 logging.basicConfig(
@@ -37,8 +38,19 @@ logging.basicConfig(
 
 class PreprocessingPipeline:
     def __init__(self, data_dir="data"):
-        """
-        data_dir: path containing SDxx subfolders or .h5ad files.
+        """Initializes the data processing pipeline with the specified data directory.
+
+        Args:
+            data_dir (str): Path to the base directory containing SDxx subfolders or 
+                `.h5ad` files. If a relative path is provided, it is resolved to an 
+                absolute path based on the current working directory.
+
+        Returns:
+            None
+
+        Raises:
+            FileNotFoundError: If the specified data directory does not exist.
+            NotADirectoryError: If the resolved data_dir path is not a directory.
         """
         data_dir = Path(data_dir)
         if not data_dir.is_absolute():
@@ -47,33 +59,42 @@ class PreprocessingPipeline:
         sc.settings.n_jobs = -1
         self.adata = None
 
-        # Immediate subdirectories under data_dir
         self.sample_dirs = [entry.path for entry in os.scandir(self.data_dir) if entry.is_dir()]
 
         logging.info(f"Initialized pipeline with data_dir: {self.data_dir}")
         logging.info(f"Found {len(self.sample_dirs)} sample directories")
     
     @staticmethod
-    def _load_h5ad_file(fpath):
+    def __load_h5ad_file(fpath):
         """
-        Load a single .h5ad file, annotate project/sample/source,
-        and make sure we preserve any existing `tumor_stage`.
+        Loads a .h5ad file into memory and standardizes its metadata.
+
+        Adds or sets default values for key observation metadata fields such as 
+        'tumor_stage', 'sample', 'source', 'project', and converts 'batch' to string 
+        if present.
+
+        Args:
+            fpath (str): Path to the `.h5ad` file to be loaded.
+
+        Returns:
+            AnnData or None: The loaded AnnData object with updated `.obs` metadata, 
+            or `None` if an error occurred during loading.
+
+        Raises:
+            None: All exceptions are caught internally and logged; no exceptions are propagated.
         """
         logging.info(f"Loading h5ad file: {fpath}")
         try:
             ad = sc.read_h5ad(fpath).to_memory()
             sample_id = os.path.splitext(os.path.basename(fpath))[0]
 
-            # 1) Preserve existing tumor_stage or initialize as NaN
             if 'tumor_stage' not in ad.obs.columns:
                 ad.obs['tumor_stage'] = np.nan
 
-            # 2) Annotate sample, source, project without clobbering existing obs
             ad.obs['sample']  = ad.obs.get('sample', sample_id)
             ad.obs['source']  = fpath
             ad.obs['project'] = ad.obs.get('project', sample_id)
 
-            # 3) Ensure batch is string if present
             if 'batch' in ad.obs.columns:
                 ad.obs['batch'] = ad.obs['batch'].astype(str)
 
@@ -86,13 +107,27 @@ class PreprocessingPipeline:
     @staticmethod
     def _load_sample_dir(sample_dir):
         """
-        Load everything under sample_dir (SDxx) into one AnnData:
-        - nested .h5ad and 10× data
-        - preserve any existing `tumor_stage`
-        - if missing, infer `tumor_stage` (and `disease`) from the SD number
+        Loads and processes all single-cell data files within a sample directory.
+
+        This function walks through the given directory, loading `.h5ad` or 10× matrix 
+        files. It standardizes key metadata fields (`tumor_stage`, `disease`, `sample`, 
+        `project`, `source`, etc.), inferring tumor stage and disease type when missing 
+        based on the SDxx project naming convention. All loaded AnnData objects are 
+        concatenated into a single dataset representing one project.
+
+        Args:
+            sample_dir (str): Path to the sample directory containing `.h5ad` files or 
+                10× matrix data to load.
+
+        Returns:
+            List[AnnData]: A list containing a single merged `AnnData` object with all 
+            loaded and standardized data. Returns an empty list if no valid data is found.
+
+        Raises:
+            None: All exceptions during file loading are caught and logged; function 
+            does not raise errors directly.
         """
         logging.info(f"Loading sample directory as one project: {sample_dir}")
-        # mapping SD→cancer stage
         sd_numbers    = [2, 3, 4, 6, 7, 8, 9, 10, 12, 14, 15, 16]
         cancer_stages = ["insitu", "benign", "benign", "benign", "invasive",
                          "insitu", "insitu", "insitu", "insitu", "invasive",
@@ -104,7 +139,6 @@ class PreprocessingPipeline:
         collected = []
 
         for root, dirs, files in os.walk(sample_dir):
-            # --- nested .h5ad files ---
             h5ad_files = [f for f in files if f.lower().endswith(".h5ad")]
             if h5ad_files:
                 for fname in h5ad_files:
@@ -113,22 +147,18 @@ class PreprocessingPipeline:
                     try:
                         ad = sc.read_h5ad(fpath).to_memory()
 
-                        # 1) Preserve or initialize tumor_stage
                         if 'tumor_stage' not in ad.obs.columns:
-                            # infer from folder name if possible
                             m = re.search(r"SD(\d+)", project_name)
                             key = f"SD{m.group(1)}" if m else None
                             inferred = stage_to_ts.get(sd_to_stage.get(key, ''), np.nan)
                             ad.obs['tumor_stage'] = inferred
 
-                        # 2) Preserve or assign disease
                         if 'disease' not in ad.obs.columns and key in sd_to_stage:
                             ad.obs['disease'] = (
                                 "normal" if sd_to_stage[key]=="benign"
                                 else "lung adenocarcinoma"
                             )
 
-                        # 3) Annotate sample/project/source
                         sample_id = os.path.splitext(fname)[0]
                         ad.obs['sample']  = ad.obs.get('sample', sample_id)
                         ad.obs['project'] = project_name
@@ -143,19 +173,16 @@ class PreprocessingPipeline:
                         logging.info(f"    Error loading {fpath}: {e}")
                 continue
 
-            # --- 10× Matrix directory ---
             if any(f.lower().endswith((".mtx", ".mtx.gz")) for f in files):
                 logging.info(f"  → Loading 10× directory: {root}")
                 try:
                     ad = sc.read_10x_mtx(root, var_names="gene_symbols", cache=True).to_memory()
 
-                    # Initialize tumor_stage if missing
                     if 'tumor_stage' not in ad.obs.columns:
                         m = re.search(r"SD(\d+)", project_name)
                         key = f"SD{m.group(1)}" if m else None
                         ad.obs['tumor_stage'] = stage_to_ts.get(sd_to_stage.get(key, ''), np.nan)
 
-                    # Assign disease if missing
                     if 'disease' not in ad.obs.columns and key in sd_to_stage:
                         ad.obs['disease'] = (
                             "normal" if sd_to_stage[key]=="benign"
@@ -179,7 +206,6 @@ class PreprocessingPipeline:
             logging.info(f"No valid data found under {sample_dir}")
             return []
 
-        # --- concatenate all pieces for this project ---
         logging.info(f"  → Concatenating {len(collected)} pieces for project {project_name}")
         merged = sc.concat(
             collected,
@@ -188,7 +214,6 @@ class PreprocessingPipeline:
             label="subbatch"
         )
 
-        # zero-fill any NaNs in X
         if sparse.issparse(merged.X):
             merged.X.data = np.nan_to_num(merged.X.data)
         else:
@@ -203,9 +228,24 @@ class PreprocessingPipeline:
         return [merged]
 
     @staticmethod
-    def _map_gene_symbols(adata):
+    def _map_gene_symbols(adata) -> sc.AnnData:
         """
-        Replace ensembl IDs in var_names with human symbols via MyGene.
+        Maps Ensembl gene IDs to gene symbols in an AnnData object.
+
+        This method uses the MyGene.info service to convert Ensembl gene identifiers 
+        in `adata.var_names` to human gene symbols. The resulting gene symbols replace 
+        `var_names`, which are also made unique.
+
+        Args:
+            adata (AnnData): An AnnData object with Ensembl gene IDs as `var_names`.
+
+        Returns:
+            AnnData: The updated AnnData object with `var_names` mapped to gene symbols 
+            and made unique.
+
+        Raises:
+            None: All mapping failures are handled gracefully by falling back to the 
+            original Ensembl ID.
         """
         logging.info("Mapping gene symbols for one AnnData")
         mg = mygene.MyGeneInfo()
@@ -220,17 +260,28 @@ class PreprocessingPipeline:
         adata.var.index = adata.var.index.astype(str)
         return adata
 
-    def load_all_data(self):
+    def load_all_data(self) -> sc.AnnData:
         """
-        1) Load each root‐level .h5ad and each SDxx folder (as one AnnData).
-        2) Map gene symbols per‐sample.
-        3) Per‐sample QC: filter_cells(min_genes=200), filter_genes(min_cells=10).
-        4) Build union of genes across filtered samples.
-        5) Re‐index each sample into union (zero‐fill), then concatenate.
+        Loads and preprocesses all single-cell data from the provided data directory.
+
+        This method performs parallel loading of `.h5ad` files and 10× Genomics-formatted 
+        directories found in the root of `data_dir` or its subdirectories. It standardizes 
+        metadata, filters low-quality cells and genes, maps gene symbols, reindexes each 
+        dataset to a shared union of genes, and concatenates them into a single 
+        `AnnData` object stored in `self.adata`.
+
+        Args:
+            None
+
+        Returns:
+            AnnData: A single concatenated and preprocessed `AnnData` object containing 
+            all valid data loaded from the root `.h5ad` files and subdirectories.
+
+        Raises:
+            ValueError: If no valid data could be loaded or processed successfully.
         """
         logging.info("Starting parallel data loading")
 
-        # (A) Collect all root‐level .h5ad files
         root_h5ad_files = [
             entry.path
             for entry in os.scandir(self.data_dir)
@@ -240,11 +291,10 @@ class PreprocessingPipeline:
         all_adata = []
         failed_samples = []
 
-        # (B) Load in parallel
         with concurrent.futures.ProcessPoolExecutor(max_workers=16) as executor:
             futures = []
             for fpath in root_h5ad_files:
-                futures.append(executor.submit(PreprocessingPipeline._load_h5ad_file, fpath))
+                futures.append(executor.submit(PreprocessingPipeline.__load_h5ad_file, fpath))
             for sample_dir in self.sample_dirs:
                 futures.append(executor.submit(PreprocessingPipeline._load_sample_dir, sample_dir))
 
@@ -270,18 +320,15 @@ class PreprocessingPipeline:
 
         logging.info(f"Loaded {len(all_adata)} AnnData objects. Failed: {len(failed_samples)}")
 
-        # (C) Drop .raw and ensure 'project' exists
         for ad in all_adata:
             ad.raw = None
             if "project" not in ad.obs.columns:
                 ad.obs["project"] = os.path.basename(ad.obs["source"].iloc[0])
                 logging.info(f"Filled missing project for an AnnData: {ad.obs['project'].iloc[0]}")
 
-        # (D) Map gene symbols per-sample
         for i in range(len(all_adata)):
             all_adata[i] = PreprocessingPipeline._map_gene_symbols(all_adata[i])
 
-        # (E) Per-sample QC: filter_cells(min_genes=200), filter_genes(min_cells=10)
         for i, ad in enumerate(all_adata):
             logging.info(f"QC sample {i+1}/{len(all_adata)}: {ad.n_obs} cells, {ad.n_vars} genes")
             sc.pp.filter_cells(ad, min_genes=200)
@@ -289,11 +336,9 @@ class PreprocessingPipeline:
             sc.pp.filter_genes(ad, min_cells=10)
             logging.info(f"  After filter_genes: {ad.n_vars} genes")
 
-        # (F) Build union of filtered gene sets
         union_genes = sorted({g for ad in all_adata for g in ad.var_names})
         logging.info(f"Union of genes after QC: {len(union_genes)} genes")
 
-        # (G) Re-index each sample into union_genes (zero-fill missing)
         gene_to_idx = {g: idx for idx, g in enumerate(union_genes)}
         reindexed = []
         for ad in all_adata:
@@ -301,7 +346,6 @@ class PreprocessingPipeline:
             n_obs = ad.n_obs
             n_union = len(union_genes)
 
-            # Build new empty sparse matrix (n_obs × n_union)
             new_X = sparse.lil_matrix((n_obs, n_union), dtype=ad.X.dtype)
             orig_indices = [gene_to_idx[g] for g in orig_genes]
             new_X[:, orig_indices] = ad.X
@@ -316,13 +360,12 @@ class PreprocessingPipeline:
             logging.info(f"Reindexed sample: {new_adata.n_obs} cells, {new_adata.n_vars} genes")
             reindexed.append(new_adata)
 
-        # (H) Concatenate reindexed samples
         keys = [f"{ad.obs['project'].iloc[0]}_{i}" for i, ad in enumerate(reindexed)]
         self.adata = sc.concat(
             reindexed,
             label="batch",
             keys=keys,
-            join="inner",        # all var_names identical → no "-1" suffix
+            join="inner",
             index_unique=None
         )
         self.adata.obs.index = self.adata.obs.index.astype(str)
@@ -332,7 +375,6 @@ class PreprocessingPipeline:
             f"{self.adata.n_obs} total cells, {self.adata.n_vars} genes"
         )
 
-        # (I) Final NaNs → 0
         if sparse.issparse(self.adata.X):
             self.adata.X.data = np.nan_to_num(self.adata.X.data)
         else:
@@ -342,7 +384,20 @@ class PreprocessingPipeline:
 
     def preprocessing(self):
         """
-        After merging, perform normalization, log1p, and compute QC metrics on the full union.
+        Applies standard preprocessing to the loaded single-cell dataset.
+
+        This includes mitochondrial gene annotation, QC metric calculation, total-count 
+        normalization (to 10,000 reads per cell), and log1p transformation.
+
+        Args:
+            None
+
+        Returns:
+            AnnData: The processed `AnnData` object with QC metrics, normalized, and 
+            log-transformed expression data.
+
+        Raises:
+            ValueError: If `self.adata` is not loaded (i.e., `load_all_data()` was not run).
         """
         if self.adata is None:
             logging.error("Data not loaded. Run load_all_data() first.")
@@ -351,7 +406,6 @@ class PreprocessingPipeline:
         self.adata.obs.index = self.adata.obs.index.astype(str)
         self.adata.var.index = self.adata.var.index.astype(str)
 
-        # Compute percent mitochondrial genes
         self.adata.var['mt'] = self.adata.var_names.str.startswith('MT-')
         sc.pp.calculate_qc_metrics(
             self.adata,
@@ -361,7 +415,6 @@ class PreprocessingPipeline:
             inplace=True
         )
 
-        # Normalize total counts per cell
         sc.pp.normalize_total(self.adata, target_sum=1e4)
         sc.pp.log1p(self.adata)
 
@@ -372,6 +425,26 @@ class PreprocessingPipeline:
         return self.adata
 
     def ct_annotation(self):
+        """
+        Performs cell type annotation on the preprocessed single-cell dataset.
+
+        This method runs dimensionality reduction (PCA), batch correction (BBKNN), 
+        UMAP embedding, and Leiden clustering at multiple resolutions. It then annotates 
+        clusters using predefined marker gene sets for various cell types. UMAP plots 
+        are saved to disk for both raw clusters and annotated cell types.
+
+        Args:
+            None
+
+        Returns:
+            AnnData: The updated `AnnData` object with cluster and cell type annotations 
+            added to `.obs`. The result is also saved as `data/processed_data.h5ad`.
+
+        Raises:
+            ValueError: If `self.adata` is not loaded and preprocessed (i.e., 
+            `preprocessing()` has not been run).
+        """
+
         logging.debug("Starting ct_annotation")
         if self.adata is None:
             logging.error("Data not preprocessed. Run preprocessing() first.")
@@ -486,6 +559,25 @@ class PreprocessingPipeline:
 
     @staticmethod
     def __annotate_clusters_by_markers(adata, cluster_key, marker_dict):
+        """
+        Assigns cell type labels to clusters based on average marker gene expression.
+
+        For each cluster defined by `cluster_key`, this method computes the mean 
+        expression of marker genes across all cells in the cluster. The cell type 
+        with the highest average expression of its marker genes is assigned to the cluster.
+
+        Args:
+            adata (AnnData): The AnnData object containing the expression data and cluster assignments.
+            cluster_key (str): The name of the `.obs` column that contains cluster labels (e.g., "leiden_res_1.00").
+            marker_dict (dict): Dictionary mapping cell type names (str) to lists of marker gene names (List[str]).
+
+        Returns:
+            dict: A mapping from cluster label (str or int) to inferred cell type name (str).
+
+        Raises:
+            None: All edge cases, including empty clusters or missing markers, are handled gracefully.
+        """
+
         cluster2celltype = {}
         for cluster in adata.obs[cluster_key].unique():
             subset_adata = adata[adata.obs[cluster_key] == cluster]
@@ -507,7 +599,22 @@ class PreprocessingPipeline:
 
     def ___add_and_aggregate_module_scores(self, adata, gmt_file):
         """
-        For the adata object add hallmark pathway supplied by gmt_file to the metadata for each cell.
+        Adds module scores to the AnnData object based on gene sets defined in a GMT file.
+
+        This function parses gene sets from a GMT file, matches them to genes in the provided
+        AnnData object, and computes module scores using `scanpy.tl.score_genes` for each
+        gene set found.
+
+        Args:
+            adata (AnnData): An AnnData object containing single-cell data.
+            gmt_file (Path or str): Path to a GMT file containing gene sets.
+
+        Returns:
+            AnnData: The input AnnData object with new module scores added to `adata.obs`.
+
+        Raises:
+            FileNotFoundError: If the specified GMT file does not exist.
+            ValueError: If `adata` is not a valid AnnData object.
         """
         gene_sets = gp.get_library(str(gmt_file))
         adata_genes = [gene.upper() for gene in adata.var_names]
@@ -536,7 +643,18 @@ class PreprocessingPipeline:
 
     def hp_calculation(self):
         """
-        Run code to generate hallmark pathway scores.
+        Performs hallmark pathway module score calculation on single-cell data.
+
+        This function loads a preprocessed AnnData object, iterates through all GMT
+        files in a predefined directory, computes module scores for each gene set
+        using `___add_and_aggregate_module_scores`, and writes the updated object back to disk.
+
+        Returns:
+            AnnData: The updated AnnData object with all module scores added.
+
+        Raises:
+            FileNotFoundError: If the processed AnnData file does not exist.
+            Exception: If GMT file processing or AnnData read/write fails.
         """
         if os.path.exists(BASE_DIR / "data/processed_data.h5ad"):
             self.adata = sc.read_h5ad(BASE_DIR / "data/processed_data.h5ad")
@@ -551,212 +669,41 @@ class PreprocessingPipeline:
         logging.debug("hp_calculation completed")
         return self.adata
 
-    def __sp_generation(self, cpdb_inputs_dir, meta_file, counts_file, output_dir):
-        """
-        Run CellPhoneDB on a single sample’s meta/counts files.
-        If the Python API omits 'significant_means', fall back to loading whatever files exist.
-        """
-        logging.debug(f"Entering __sp_generation: output_dir={output_dir}")
-        os.makedirs(output_dir, exist_ok=True)
-
-        try:
-            logging.debug("  → Running cpdb_statistical_analysis_method.call(...)")
-            cpdb_result = cpdb_statistical_analysis_method.call(
-                cpdb_file_path=str(cpdb_inputs_dir),
-                meta_file_path=str(meta_file),
-                counts_file_path=str(counts_file),
-                counts_data='hgnc_symbol',
-                score_interactions=True,
-                iterations=1000,
-                threshold=0.1,
-                threads=8,
-                result_precision=3,
-                pvalue=0.05,
-                subsampling=False,
-                subsampling_log=False,
-                subsampling_num_pc=100,
-                subsampling_num_cells=1000,
-                separator='|',
-                debug=False,
-                output_path=str(output_dir),
-                output_suffix=None
-            )
-            logging.debug("  ← Finished cpdb_statistical_analysis_method.call(...)")
-        except KeyError as e:
-            logging.warning(f"CellPhoneDB call missing key {e!r}; reading output files from disk")
-            import glob, pandas as pd
-
-            cpdb_result = {}
-            for key in [
-                'deconvoluted', 'deconvoluted_percents',
-                'means', 'pvalues',
-                'significant_means', 'interaction_scores'
-            ]:
-                pattern = os.path.join(output_dir, f"{key}*.txt")
-                files = sorted(glob.glob(pattern))
-                if files:
-                    cpdb_result[key] = pd.read_csv(files[-1], sep='\t', index_col=0)
-                    logging.debug(f"    • Loaded '{key}' from {files[-1]}")
-                else:
-                    cpdb_result[key] = pd.DataFrame()
-                    logging.debug(f"    • No '{key}' files found; using empty DataFrame")
-
-        logging.debug("Exiting __sp_generation")
-        return cpdb_result
-
-    def lr_interactions_graph_representation(self):
-        """
-        1) Load AnnData (subset to top-5000 HVGs first).
-        2) For each sample:
-        a) write sample-specific meta/counts,
-        b) run CellPhoneDB,
-        c) build ONE Graph() per sample including hallmark scores on nodes and edges from CPDB.
-        3) Return {sample: Graph, …}.
-        Added debug logs at each major step.
-        """
-        logging.debug("=== START lr_interactions_graph_representation (per sample) ===")
-
-        # 1) Load AnnData
-        if os.path.exists(BASE_DIR / "data/processed_data.h5ad"):
-            logging.debug("Loading processed_data.h5ad into self.adata")
-            self.adata = sc.read_h5ad(BASE_DIR / "data/processed_data.h5ad")
-            self.adata.obs_names_make_unique()
-        else:
-            logging.debug("Using existing self.adata (no processed_data.h5ad found)")
-
-        logging.debug(f"Initial AnnData size: {self.adata.n_obs} cells × {self.adata.n_vars} genes")
-
-        # 1a) HVG selection
-        logging.debug("Computing top 5000 highly variable genes (HVGs)")
-        sc.pp.highly_variable_genes(
-            self.adata,
-            n_top_genes=5000,
-            flavor='seurat_v3',
-            subset=False,
-            n_bins=20,
-            batch_key=None
-        )
-        num_hvg = int(self.adata.var.get('highly_variable', False).sum())
-        logging.debug(f"  → {num_hvg} genes flagged as HVG")
-        self.adata = self.adata[:, self.adata.var['highly_variable']].copy()
-        logging.debug(f"After HVG subset: {self.adata.n_obs} cells × {self.adata.n_vars} genes")
-
-        # 2) Hallmark columns
-        gmt_dir = BASE_DIR / "HallmarkPathGMT"
-        hallmark_columns = []
-        if gmt_dir.exists():
-            logging.debug(f"Scanning {gmt_dir} for Hallmark GMTs")
-            for gmt in gmt_dir.glob("*.gmt"):
-                logging.debug(f"  • Parsing {gmt.name}")
-                gs = gp.get_library(str(gmt))
-                for pw in gs:
-                    if pw in self.adata.obs:
-                        hallmark_columns.append(pw)
-                    elif f"{pw}_score" in self.adata.obs:
-                        hallmark_columns.append(f"{pw}_score")
-        hallmark_columns = list(set(hallmark_columns))
-        logging.debug(f"Found {len(hallmark_columns)} hallmark columns")
-
-        # 3) Per-sample processing
-        sample_graphs = {}
-        for sample in self.adata.obs['sample'].unique():
-            logging.debug(f"--- SAMPLE: {sample} ---")
-            ad_sub = self.adata[self.adata.obs['sample'] == sample].copy()
-
-            # write inputs
-            inp = BASE_DIR / f"data/cellphonedb_inputs/{sample}"
-            out = BASE_DIR / f"data/cellphonedb_outputs/{sample}"
-            os.makedirs(inp, exist_ok=True)
-            os.makedirs(out, exist_ok=True)
-
-            meta = pd.DataFrame({
-                'Cell': ad_sub.obs_names,
-                'cell_type': ad_sub.obs['leiden_res_20.00_celltype']
-            })
-            meta_file = inp / "meta.txt"
-            meta.to_csv(meta_file, sep='\t', index=False)
-
-            mat = ad_sub.X.todense() if hasattr(ad_sub.X, "todense") else ad_sub.X
-            counts = pd.DataFrame(mat.T, index=ad_sub.var_names, columns=ad_sub.obs_names)
-            counts.index.name = 'Gene'
-            counts_file = inp / "counts.txt"
-            counts.reset_index().to_csv(counts_file, sep='\t', index=False)
-
-            # run CPDB
-            logging.debug("  → running __sp_generation")
-            cpdb_out = self.__sp_generation(
-                cpdb_inputs_dir=str(BASE_DIR / "data/cellphonedb_inputs/v5.0.0/cellphonedb.zip"),
-                meta_file=str(meta_file),
-                counts_file=str(counts_file),
-                output_dir=str(out)
-            )
-            logging.debug("  ← CPDB done")
-
-            sig = cpdb_out.get('significant_means')
-            if sig is None or sig.empty:
-                logging.debug(f"No significant interactions for sample '{sample}'; skipping.")
-                continue
-
-            # build one graph per sample
-            g = Graph()
-            # add all cell-type nodes with hallmark data
-            cs = ad_sub.obs[['leiden_res_20.00_celltype'] + hallmark_columns].copy()
-            cs.index.name = 'cell_id'
-            for ct, sub in cs.groupby('leiden_res_20.00_celltype'):
-                g.add_node(name=str(ct), df=sub)
-
-            # add edges from significant_means
-            exclude = {
-                'id_cp_interaction','interacting_pair','partner_a','partner_b',
-                'gene_a','gene_b','secreted','receptor_a','receptor_b',
-                'annotation_strategy','is_integrin','directionality',
-                'rank','classification'
-            }
-            for _, row in sig.iterrows():
-                if pd.isna(row['classification']):
-                    continue
-                directed = (row['directionality'].strip() == "Ligand-Receptor")
-                for col, val in row.items():
-                    if col in exclude or pd.isna(val) or float(val) == 0:
-                        continue
-                    parts = col.split('|')
-                    if len(parts) != 2:
-                        continue
-                    src = g.get_node_by_name(parts[0].strip())
-                    tgt = g.get_node_by_name(parts[1].strip())
-                    if src and tgt:
-                        g.add_edge(
-                            src, tgt,
-                            name=str(row['classification']),
-                            quant=float(val),
-                            directed=directed
-                        )
-
-            sample_graphs[sample] = g
-            logging.debug(f"Built graph for sample '{sample}' with "
-                        f"{len(g.nodes)} nodes and {len(g.edges)} edges")
-
-        # persist and return
-        with open(BASE_DIR / 'data/lr_interactions_per_sample.pkl', 'wb') as f:
-            pickle.dump(sample_graphs, f)
-        logging.debug("Saved lr_interactions_per_sample.pkl")
-        logging.debug("=== END lr_interactions_graph_representation ===")
-
-        return sample_graphs
-
     def monocle_per_celltype(self):
         """
-        For each cell_type:
-        1) Subset to that cell_type.
-        2) Restrict to top 5000 HVGs (so UMAP/graph is faster).
-        3) Compute UMAP, learn principal graph, pseudotime.
-        4) Overlay sample‐centroids colored by disease.
-        Added logging at key stages to track performance and a thorough NaN/string investigation for 'tumor_stage'.
-        """
+        Performs pseudotime trajectory analysis per cell type using UMAP and principal graph learning.
 
+        This method:
+        - Loads preprocessed single-cell data (`.h5ad` file).
+        - Validates and filters based on the `tumor_stage` annotation.
+        - Subsets data by cell type (`leiden_res_20.00_celltype`) and processes each separately.
+        - For each cell type with ≥50 cells:
+            - Computes highly variable genes (HVGs).
+            - Runs UMAP and Leiden clustering (if not already present).
+            - Learns a principal graph and calculates pseudotime.
+            - Visualizes the trajectory and overlays sample centroids colored by tumor stage.
+            - Saves each plot to a predefined directory.
+        - Aggregates results per cell type.
+
+        Args:
+            None
+
+        Returns:
+            Dict[str, AnnData]: A dictionary mapping each processed cell type to its corresponding
+            `AnnData` object, with pseudotime stored in `.obs['pseudotime']`.
+
+        Raises:
+            ValueError: If no preprocessed data is found or preprocessing has not been run.
+            KeyError: If the `tumor_stage` column is missing in `AnnData.obs`.
+            Exception: Logs and skips individual cell types if unexpected errors occur during processing.
+
+        Notes:
+            - Requires `leiden_res_20.00_celltype`, `sample`, and `tumor_stage` to be annotated in `AnnData.obs`.
+            - Output plots are saved under `BASE_DIR/figures/trajectory_plots/`.
+            - Uses custom UMAP-based graph learning and pseudotime ordering functions: `learn_graph` and `order_cells`.
+        """
         logging.debug("=== START monocle_per_celltype ===")
 
-        # Reload processed data if available
         if os.path.exists(BASE_DIR / "data/processed_data.h5ad"):
             logging.debug("Reloading processed_data.h5ad for monocle_per_celltype")
             self.adata = sc.read_h5ad(BASE_DIR / "data/processed_data.h5ad")
@@ -766,17 +713,13 @@ class PreprocessingPipeline:
             logging.error("Data not preprocessed. Run preprocessing() first.")
             raise ValueError("Data not preprocessed. Run preprocessing() first.")
 
-        # Ensure tumor_stage annotation exists
         if 'tumor_stage' not in self.adata.obs.columns:
             logging.error("Column 'tumor_stage' not found in AnnData.obs")
             raise KeyError("Column 'tumor_stage' not found in AnnData.obs."
                         " Please annotate tumor_stage when loading your data.")
 
-        # Robust handling of missing tumor_stage
-        # Convert common string representations of NaN to actual np.nan
         self.adata.obs['tumor_stage'] = self.adata.obs['tumor_stage'].replace(['nan', 'NaN', 'NAN'], np.nan)
 
-        # Thorough NaN investigation for tumor_stage
         dist_pre = self.adata.obs['tumor_stage'].value_counts(dropna=False)
         logging.debug(f"tumor_stage distribution before drop (incl NaN/strings):\n{dist_pre}")
 
@@ -787,21 +730,17 @@ class PreprocessingPipeline:
             logging.debug(f"Dropping {n_missing} cells with missing tumor_stage")
             self.adata = self.adata[mask, :].copy()
 
-        # Check post-drop distribution
         dist_post = self.adata.obs['tumor_stage'].value_counts(dropna=False)
         logging.debug(f"tumor_stage distribution after drop (incl NaN):\n{dist_post}")
 
-        # Prepare output directory for plots
         trajectory_dir = BASE_DIR / "figures/trajectory_plots"
         os.makedirs(trajectory_dir, exist_ok=True)
         logging.debug(f"Ensured trajectory directory exists: {trajectory_dir}")
 
-        # Custom pseudotime colormap
         cmap_custom = LinearSegmentedColormap.from_list('gray_emerald', ['gray', '#00a4ef'])
 
         results = {}
 
-        # Loop per cell_type
         for cell_type in self.adata.obs['leiden_res_20.00_celltype'].unique():
             logging.debug(f"--- Processing cell_type = '{cell_type}' ---")
 
@@ -812,7 +751,6 @@ class PreprocessingPipeline:
                 logging.warning(f"  Skipping '{cell_type}' ({adata_ct.n_obs} cells < 50)")
                 continue
 
-            # HVG selection
             logging.debug("  Computing top 5000 HVGs within this cell_type subset")
             sc.pp.highly_variable_genes(
                 adata_ct,
@@ -828,7 +766,6 @@ class PreprocessingPipeline:
             adata_ct = adata_ct[:, adata_ct.var['highly_variable']].copy()
             logging.debug(f"  After HVG subset: {adata_ct.n_obs} cells × {adata_ct.n_vars} genes")
 
-            # Neighbors + UMAP
             if 'X_umap' not in adata_ct.obsm:
                 logging.debug("  Computing neighbors + UMAP")
                 sc.pp.neighbors(adata_ct)
@@ -838,7 +775,6 @@ class PreprocessingPipeline:
 
             umap = adata_ct.obsm['X_umap']
 
-            # Ensure Leiden clusters exist
             if 'leiden' not in adata_ct.obs:
                 logging.debug("  Computing Leiden clustering")
                 sc.tl.leiden(adata_ct)
@@ -848,7 +784,6 @@ class PreprocessingPipeline:
                 logging.warning("  Found NaN in leiden; coercing to int with NaN→-1")
                 louvain = pd.to_numeric(adata_ct.obs['leiden'], errors='coerce').fillna(-1).astype(int).values
 
-            # Learn principal graph + pseudotime
             try:
                 logging.debug("  Learning principal graph via learn_graph(...)")
                 projected_points, mst, centroids = learn_graph(
@@ -862,7 +797,6 @@ class PreprocessingPipeline:
                 adata_ct.obs['pseudotime'] = pseudotime
                 logging.debug("  Pseudotime assigned to adata_ct.obs")
 
-                # 5) Plot pseudotime scatter + MST edges
                 plt.figure(figsize=(8, 6))
                 plt.title(f"Principal graph + sample‐centroids ({cell_type})")
 
@@ -877,7 +811,6 @@ class PreprocessingPipeline:
                     x1, y1 = centroids[edge[1], 0], centroids[edge[1], 1]
                     plt.plot([x0, x1], [y0, y1], c="black", linewidth=1)
 
-                # Compute sample centroids with tumor_stage
                 df_umap = pd.DataFrame(umap, columns=['UMAP1', 'UMAP2'], index=adata_ct.obs_names)
                 df_umap['sample'] = adata_ct.obs['sample'].values
                 df_umap['tumor_stage'] = adata_ct.obs['tumor_stage'].values
@@ -893,14 +826,12 @@ class PreprocessingPipeline:
                         .reset_index()
                 )
 
-                # Explicit color mapping for tumor stages
                 stage_colors = {
                     'non-cancer': '#84A970',
                     'early': '#E4C282',
                     'advanced': '#FF8C00'
                 }
 
-                # Overlay centroids colored by tumor_stage
                 for _, row in centroid_df.iterrows():
                     stg = row['tumor_stage']
                     plt.scatter(
@@ -909,7 +840,6 @@ class PreprocessingPipeline:
                         edgecolors='none', marker='o', zorder=10
                     )
 
-                # Legend
                 legend_patches = [mpatches.Patch(color=col, label=stg)
                                 for stg, col in stage_colors.items()]
                 plt.legend(handles=legend_patches, title='Tumor stage', loc='best', frameon=True)
