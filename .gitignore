@@ -6,3 +6,5 @@ py-monocle
 notebooks
 HallmarkPathGMT
 docs
+slurm-figures.sh
+slurm.sh
