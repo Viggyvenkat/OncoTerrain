@@ -28,14 +28,14 @@ OncoTerrain-paper/
 |   |   |-- figure-4-spatial.py
 |   |   |-- figure-5.py
 |   |   |-- tcga-val.R
-|   |-- TMEGPT/
+|   |   |-- creating-vectors.py
+|   |   |-- figure-4-cellchat.R
+|   |-- preprocessing/
 |   |   |-- OncoTerrain.py
 |   |   |-- __init__.py
 |   |   |-- preprocessing.py
 |   |   |-- main.py
-|-- notebooks/
-|   |-- creating_vectors.ipynb
-|   |-- figure4-cellchat.ipynb
+
 ```
 
 Our preprocessing script has been engineered to handle other samples as well, as long as they are in the: ``` ../../data ``` respective of where the preprocessing.py script lies. All of the code for the figures lies in ```src/fig-generation``` or in ```notebooks```, whereas all of the data cleaning, preprocessing, and exploration lies within ```src/TMEGPT```. All of the documentation (in the form of docstrings) lies within the files for futher, clear explanations. For utilizing OncoTerrain, we have set up a seperate [OncoTerrain repository](https://github.com/Viggyvenkat/OncoTerrain.git) with instructions on how to utilize our model for inference.
