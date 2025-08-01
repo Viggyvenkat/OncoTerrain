@@ -13,11 +13,8 @@ from scipy.spatial.distance import pdist, squareform
 from itertools import combinations
 import seaborn as sns
 
-
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-
 
 logging.basicConfig(
     level=logging.DEBUG,

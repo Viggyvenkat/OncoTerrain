@@ -1,22 +1,15 @@
-# Core Python modules
 import sys
 import os
 from pathlib import Path
-
-# Numerical and Data Handling
 import numpy as np
 import pandas as pd
 from scipy.stats import f_oneway
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
-
-# PyTorch and related tools
 import torch 
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-
-# Scikit-learn
 from sklearn.model_selection import train_test_split, RandomizedSearchCV, StratifiedKFold
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, LabelEncoder
 from sklearn.feature_selection import VarianceThreshold
@@ -29,8 +22,6 @@ from sklearn.metrics import (
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.preprocessing import label_binarize
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
-
-# Visualization
 import matplotlib.pyplot as plt
 import seaborn as sns
 import matplotlib.colors as mcolors
@@ -41,29 +32,18 @@ from matplotlib.lines import Line2D
 import matplotlib.patches as mpatches
 from matplotlib.colors import ListedColormap
 from sklearn.metrics.pairwise import cosine_similarity
-
-# Dimensionality Reduction and Clustering
 import umap
 from sklearn.decomposition import PCA
 from sklearn.cluster import DBSCAN
-
-# Statistics and Effect Size
 import pingouin as pg
 from pingouin import compute_effsize
-
-# Logging
 import logging
-
-# TabNet
 from pytorch_tabnet.tab_model import TabNetClassifier
-
-# Single-cell analysis
 import scanpy as sc
 from py_monocle import (
     learn_graph, order_cells, compute_cell_states, regression_analysis, 
     differential_expression_genes
 )
-
 import joblib
 import logging
 import matplotlib.colors as mcolors
@@ -134,14 +114,12 @@ CONDITIONS = {
 }
 
 def __feature_analysis_w_preprocessing(data):
-    # Cell type and project name mappings
     celltype_mapping = {name: i for i, name in enumerate(data['leiden_res_20.00_celltype'].unique())}
     project_mapping = {name: i for i, name in enumerate(data['project'].unique())}
 
     logger.info(f"Cell type mapping:\n{celltype_mapping}")
     logger.info(f"Project name mapping:\n{project_mapping}")
 
-    # Filter epithelial and balance by tumor_stage
     epithelial_data = data[data['leiden_res_20.00_celltype'] == 'Epithelial cell']
     counts = epithelial_data['tumor_stage'].value_counts()
     min_count = counts.min()
@@ -149,7 +127,6 @@ def __feature_analysis_w_preprocessing(data):
     non_epithelial_data = data[data['leiden_res_20.00_celltype'] != 'Epithelial cell']
     data = pd.concat([non_epithelial_data, balanced_epithelial_data])
 
-    # Map labels to integers
     data.loc[:, 'tumor_stage'] = data['tumor_stage'].map({'non-cancer': 0, 'early': 1, 'advanced': 2})
     data.loc[:, 'project'] = data['project'].map(project_mapping)
     data.loc[:, 'leiden_res_20.00_celltype'] = data['leiden_res_20.00_celltype'].map(celltype_mapping)
@@ -166,11 +143,10 @@ def __feature_analysis_w_preprocessing(data):
 def __figure_five_B(adata, save_path, embedding):
     logging.info("Starting __figure_five_B plotting function.")
 
-    # Define all color palettes for each stage-specific highlight
     palettes = [
-        {0: "#84A970", 1: "#D3D3D3", 2: "#D3D3D3"},  # Highlight stage 0 (benign)
-        {0: "#D3D3D3", 1: "#E4C282", 2: "#D3D3D3"},  # Highlight stage 1 (in situ)
-        {0: "#D3D3D3", 1: "#D3D3D3", 2: "#FF8C00"},  # Highlight stage 2 (invasive)
+        {0: "#84A970", 1: "#D3D3D3", 2: "#D3D3D3"}, 
+        {0: "#D3D3D3", 1: "#E4C282", 2: "#D3D3D3"},  
+        {0: "#D3D3D3", 1: "#D3D3D3", 2: "#FF8C00"}, 
     ]
 
     titles = ['Non-Cancer Highlighted', 'Early Highlighted', 'Advanced Highlighted']
@@ -189,19 +165,17 @@ def __figure_five_B(adata, save_path, embedding):
             palette=palette,
             s=1,
             ax=ax,
-            legend=False  # Suppress individual legends
+            legend=False 
         )
         ax.set_title(title, fontsize=16)
         ax.set_xlabel('UMAP1', fontsize=14)
         ax.set_ylabel('UMAP2' if i == 0 else '', fontsize=14)
 
-        # Style axes
         for spine in ax.spines.values():
             spine.set_edgecolor('black')
             spine.set_linewidth(2)
         ax.grid(False)
 
-    # Add a single legend outside the plot
     handles, labels = axes[0].get_legend_handles_labels()
     logging.info(f"Adding legend with labels: {labels}")
     fig.legend(handles, labels, title='Cancer Stage', fontsize=12, title_fontsize=14,
@@ -238,7 +212,6 @@ def __figure_five_C(adata, save_path, embedding, hallmark_list=None):
         plt.xlabel('UMAP1', fontsize=14)
         plt.ylabel('UMAP2', fontsize=14)
 
-        # Add a colorbar
         cbar = plt.colorbar(scatter)
         cbar.set_label(hallmark, rotation=270, labelpad=15)
         cbar.ax.yaxis.set_label_position('left')
@@ -306,7 +279,6 @@ def figure_five_E(meta_data, save_path, stage=2, stage_column='tumor_stage',
                                    stage_label=None
                                    ):
 
-    # 3. Compute pseudobulk matrix (average per sample)
     meta_data[groupby_column] = meta_data[groupby_column].values
     logging.info(f"meta data data types: {meta_data.dtypes}")
 
@@ -316,20 +288,16 @@ def figure_five_E(meta_data, save_path, stage=2, stage_column='tumor_stage',
 
     pseudobulk_expr.columns = [col.upper().replace("HALLMARK_", "") for col in pseudobulk_expr.columns]
 
-    # 4. Join stage information
     sample_metadata = meta_data[[groupby_column, stage_column]].drop_duplicates().set_index(groupby_column)
     pseudobulk_expr = pseudobulk_expr.join(sample_metadata)
 
-    # 5. Filter for selected stage
     selected_data = pseudobulk_expr[pseudobulk_expr[stage_column] == stage].drop(columns=stage_column).T
 
-    # 7. Annotate with condition and average
     selected_data = selected_data.reset_index().rename(columns={'index': 'hallmark'})
     selected_data['Condition'] = selected_data['hallmark'].map(lambda x: ', '.join(CONDITIONS.get(x, []))).str.lower()
     selected_data = selected_data.dropna(subset=['Condition'])
     selected_data['mean_score'] = selected_data.drop(columns=['hallmark', 'Condition']).mean(axis=1)
 
-    # 8. Explode multi-condition rows
     expanded_data = selected_data[['hallmark', 'mean_score', 'Condition']].copy()
     expanded_data = expanded_data.assign(Condition=expanded_data['Condition'].str.split(', '))
     expanded_data = expanded_data.explode('Condition').reset_index(drop=True)
@@ -352,17 +320,14 @@ def figure_five_E(meta_data, save_path, stage=2, stage_column='tumor_stage',
         IDXS += list(range(offset + PAD, offset + size + PAD))
         offset += size + PAD
 
-    # 9. Normalize values
     scaler = MinMaxScaler(scale_range)
     VALUES = scaler.fit_transform(VALUES.reshape(-1, 1)).flatten()
 
-    # 10. Assign colors
     cmap = plt.get_cmap("tab20", 50)
     unique_labels = np.unique(LABELS)
     color_map = {label: cmap(i % 20) for i, label in enumerate(unique_labels)}
     COLORS = [color_map[label] for label in LABELS]
 
-    # 11. Plot
     fig, ax = plt.subplots(figsize=(20, 10), subplot_kw={"projection": "polar"})
     ax.set_theta_offset(OFFSET)
     ax.set_ylim(-scale_range[1], scale_range[1])
@@ -374,7 +339,6 @@ def figure_five_E(meta_data, save_path, stage=2, stage_column='tumor_stage',
 
     ax.bar(ANGLES[IDXS], VALUES, width=WIDTH, color=COLORS, edgecolor="white", linewidth=2)
 
-    # 12. Group separators + labels
     offset = 0
     for group, size in zip(np.unique(GROUP), GROUPS_SIZE):
         x1 = np.linspace(ANGLES[offset + PAD], ANGLES[offset + size + PAD - 1], num=50)
@@ -388,12 +352,10 @@ def figure_five_E(meta_data, save_path, stage=2, stage_column='tumor_stage',
                 ha="center", va="center", rotation=rotation_angle)
         offset += size + PAD
 
-    # 13. Legend
     legend_handles = [mpatches.Patch(color=color_map[label], label=label) for label in unique_labels]
     plt.legend(handles=legend_handles, bbox_to_anchor=(1.1, 1), loc="upper left",
                fontsize=12, title="Pathways")
 
-    # 14. Save
     suffix = stage_label or f"stage_{stage}"
     plt.tight_layout()
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
@@ -477,13 +439,10 @@ def __train_model(adata):
 
     plt.savefig(BASE_DIR / "figures/ROC-AUC-PLOT.png", dpi=300, bbox_inches='tight')
 
-    # Predict on validation set
     y_val_pred = random_search.predict(X_val.values)
 
-    # Generate confusion matrix
     cm = confusion_matrix(y_val, y_val_pred)
 
-    # Plot confusion matrix
     disp = ConfusionMatrixDisplay(confusion_matrix=cm)
     disp.plot(cmap=plt.cm.Blues)
     plt.title('Confusion Matrix - Type I vs Type II Errors')
@@ -523,25 +482,6 @@ def __figure_five_H():
             )
             logging.info(f"OncoTerrain {dir.name} processing completed successfully.")
 
-def __get_top_de_genes(mice_data: pd.DataFrame, reference_col: str = 'Normal Lung', top_n: int = 1000):
-    expression_cols = [col for col in mice_data.columns if col not in ['Gene', 'Human_Ortholog']]
-    
-    if reference_col not in expression_cols:
-        raise ValueError(f"Reference column '{reference_col}' not found in mice_data.")
-    
-    pseudocount = 1e-6
-    ref_expr = mice_data[reference_col] + pseudocount
-
-    log2fc_df = mice_data[expression_cols].apply(lambda col: np.log2((col + pseudocount) / ref_expr))
-    
-    max_abs_log2fc = log2fc_df.drop(columns=[reference_col]).abs().max(axis=1)
-
-    mice_data = mice_data.copy()
-    mice_data['max_abs_log2FC'] = max_abs_log2fc
-    top_genes = mice_data.nlargest(top_n, 'max_abs_log2FC').drop(columns='max_abs_log2FC')
-
-    return top_genes
-
 def __figure_five_F(save_path, mice_data: pd.DataFrame):
     BASE_DIR = Path.cwd()
     save_path = Path(save_path)
@@ -550,8 +490,6 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
     logging.info("Starting __figure_five_F plotting function.")
     
     oncoterrain_files = list((BASE_DIR / 'figures').glob('*_oncoterrain/OncoTerrain_annotated.h5ad'))
-
-    # mice_data = __get_top_de_genes(mice_data, reference_col='Normal Lung', top_n=1000)
     
     mice_columns = [col for col in mice_data.columns if col not in ['Gene', 'Human_Ortholog']]
     logging.info(f"Mice data columns for analysis: {mice_columns}")
@@ -715,21 +653,21 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
 
         xtick_positions = []
         xtick_labels = []
-        box_width = 0.9  # Wider to make boxes touch
-        group_spacing = 5  # Increase this value for more space between groups
+        box_width = 0.9  
+        group_spacing = 5  
 
         for idx, condition in enumerate(selected_conditions):
-            base_position = idx * group_spacing  # increased spacing between groups
+            base_position = idx * group_spacing 
             condition_data = filtered_df[filtered_df['Mice_Condition'] == condition]
 
             for j, class_name in enumerate(selected_classes):
                 class_data = condition_data[condition_data['OncoTerrain_Class'] == class_name]['Cosine_Similarity'].values
                 if len(class_data) > 0:
                     box_data.append(class_data)
-                    box_positions.append(base_position + j)  # boxes within group remain touching
+                    box_positions.append(base_position + j)  
                     box_labels.append(class_name)
 
-            xtick_positions.append(base_position + 1)  # center label between 3 boxes
+            xtick_positions.append(base_position + 1) 
             xtick_labels.append(condition)
 
         bp = ax.boxplot(
@@ -739,7 +677,6 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
             widths=box_width
         )
 
-        # Color boxes + set black median lines
         for patch, label in zip(bp['boxes'], box_labels):
             patch.set_facecolor(class_colors.get(label, 'gray'))
             patch.set_alpha(0.85)
@@ -753,12 +690,10 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
         ax.set_ylabel("Cosine Similarity", fontsize=12)
         ax.set_title("OncoTerrain Class vs Mice Conditions", fontsize=14, fontweight='bold')
 
-        # Remove grid and top/right spines
         ax.grid(False)
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
 
-        # Add legend to the right, no frame
         handles = [plt.Line2D([0], [0], color=class_colors[c], lw=8) for c in selected_classes]
         ax.legend(handles, selected_classes, title="OncoTerrain Class", frameon=False,
                 loc='center left', bbox_to_anchor=(1.02, 0.5))
@@ -769,7 +704,6 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
         plt.close()
         logging.info(f"Grouped box plot saved to: {grouped_boxplot_path}")
 
-        # ---- Pearson Correlation Boxplot ----
         if filtered_df.empty:
             logging.error("No data available for the selected Mice Conditions. Aborting Pearson correlation boxplot.")
         else:
@@ -783,7 +717,7 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
             xtick_labels = []
 
             for idx, condition in enumerate(selected_conditions):
-                base_position = idx * group_spacing  # same spacing as cosine similarity
+                base_position = idx * group_spacing 
                 condition_data = filtered_df[filtered_df['Mice_Condition'] == condition]
 
                 for j, class_name in enumerate(selected_classes):
@@ -830,7 +764,6 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
             plt.close()
             logging.info(f"Pearson correlation box plot saved to: {pearson_boxplot_path}")
 
-    # ---- Heatmap Plot ----
     plt.figure(figsize=(12, 8))
     sns.heatmap(summary_df, annot=True, cmap='coolwarm', center=0, 
                fmt='.3f', cbar_kws={'label': 'Mean Cosine Similarity'})
@@ -852,57 +785,56 @@ if __name__ == '__main__':
     logging.info("Script started.")
     
     BASE_DIR = Path.cwd()
-    # data_path = BASE_DIR / 'data/processed_data.h5ad'
-    # logging.info(f"Reading data from {data_path}")
-    # adata = sc.read_h5ad(filename=str(data_path))
+    data_path = BASE_DIR / 'data/processed_data.h5ad'
+    logging.info(f"Reading data from {data_path}")
+    adata = sc.read_h5ad(filename=str(data_path))
     
-    # logging.info("Copying and preprocessing metadata.")
-    # meta_data = adata.obs.copy()
-    # meta_data.columns = meta_data.columns.str.replace('^HALLMARK_', '', regex=True)
+    logging.info("Copying and preprocessing metadata.")
+    meta_data = adata.obs.copy()
+    meta_data.columns = meta_data.columns.str.replace('^HALLMARK_', '', regex=True)
     
-    # # Drop object dtype columns except specified exceptions
-    # meta_data = meta_data.drop(columns= ['disease', 'sample', 'source', 'tissue', 'n_genes', 'batch', 
-    #                            'n_genes_by_counts', 'total_counts', 'total_counts_mt', 'pct_counts_mt', 'leiden_res_0.10', 
-    #                            'leiden_res_1.00', 'leiden_res_5.00', 'leiden_res_10.00', 'leiden_res_20.00', 'leiden_res_0.10_celltype',
-    #                            'leiden_res_1.00_celltype', 'leiden_res_5.00_celltype', 'leiden_res_10.00_celltype'])
+    meta_data = meta_data.drop(columns= ['disease', 'sample', 'source', 'tissue', 'n_genes', 'batch', 
+                               'n_genes_by_counts', 'total_counts', 'total_counts_mt', 'pct_counts_mt', 'leiden_res_0.10', 
+                               'leiden_res_1.00', 'leiden_res_5.00', 'leiden_res_10.00', 'leiden_res_20.00', 'leiden_res_0.10_celltype',
+                               'leiden_res_1.00_celltype', 'leiden_res_5.00_celltype', 'leiden_res_10.00_celltype'])
 
-    # logging.info("Running feature analysis preprocessing.")
-    # updated_meta_data, _, _ = __feature_analysis_w_preprocessing(meta_data)
+    logging.info("Running feature analysis preprocessing.")
+    updated_meta_data, _, _ = __feature_analysis_w_preprocessing(meta_data)
     
-    # hallmark_list = updated_meta_data.columns[~updated_meta_data.columns.isin(['tumor_stage', 'project', 'leiden_res_20.00_celltype'])]
-    # logging.info(f"Identified hallmark features: {list(hallmark_list)}")
+    hallmark_list = updated_meta_data.columns[~updated_meta_data.columns.isin(['tumor_stage', 'project', 'leiden_res_20.00_celltype'])]
+    logging.info(f"Identified hallmark features: {list(hallmark_list)}")
     
-    # features = updated_meta_data.drop(columns=['tumor_stage', 'leiden_res_20.00_celltype', 'project'])
-    # tumor_stage = updated_meta_data['tumor_stage']
+    features = updated_meta_data.drop(columns=['tumor_stage', 'leiden_res_20.00_celltype', 'project'])
+    tumor_stage = updated_meta_data['tumor_stage']
     
-    # logging.info("Initializing UMAP reducer with parameters: n_neighbors=50, min_dist=0.05, metric='euclidean'")
-    # reducer = umap.UMAP(n_neighbors=50, min_dist=0.05, metric='euclidean', random_state=42)
+    logging.info("Initializing UMAP reducer with parameters: n_neighbors=50, min_dist=0.05, metric='euclidean'")
+    reducer = umap.UMAP(n_neighbors=50, min_dist=0.05, metric='euclidean', random_state=42)
     
-    # logging.info("Fitting UMAP to features and transforming.")
-    # embedding = reducer.fit_transform(features)
-    # logging.info("UMAP embedding shape: %s", embedding.shape)
+    logging.info("Fitting UMAP to features and transforming.")
+    embedding = reducer.fit_transform(features)
+    logging.info("UMAP embedding shape: %s", embedding.shape)
     
-    # fig5B_path = BASE_DIR / 'figures/fig-5B.png'
-    # fig5C_path = BASE_DIR / 'figures/fig-5C'
-    # fig5D_path = BASE_DIR / 'figures/fig-5D.png'
-    # fig5E_path = BASE_DIR / 'figures/fig-5E.png'
+    fig5B_path = BASE_DIR / 'figures/fig-5B.png'
+    fig5C_path = BASE_DIR / 'figures/fig-5C'
+    fig5D_path = BASE_DIR / 'figures/fig-5D.png'
+    fig5E_path = BASE_DIR / 'figures/fig-5E.png'
     
-    # logging.info("Generating figure 5B.")
-    # __figure_five_B(updated_meta_data, save_path=str(fig5B_path), embedding=embedding)
+    logging.info("Generating figure 5B.")
+    __figure_five_B(updated_meta_data, save_path=str(fig5B_path), embedding=embedding)
     
-    # logging.info("Generating figure 5C.")
-    # __figure_five_C(updated_meta_data, save_path=str(fig5C_path), embedding=embedding, hallmark_list=hallmark_list)
+    logging.info("Generating figure 5C.")
+    __figure_five_C(updated_meta_data, save_path=str(fig5C_path), embedding=embedding, hallmark_list=hallmark_list)
     
-    # logging.info("Generating figure 5D.")
-    # __figure_five_D(updated_meta_data, save_path=str(fig5D_path))
+    logging.info("Generating figure 5D.")
+    __figure_five_D(updated_meta_data, save_path=str(fig5D_path))
     
-    # logging.info("Generating figure 5E.")
-    # figure_five_E(updated_meta_data, save_path=str(fig5E_path))
+    logging.info("Generating figure 5E.")
+    figure_five_E(updated_meta_data, save_path=str(fig5E_path))
     
-    # logging.info("Training model.")
-    # model = __train_model(updated_meta_data)
+    logging.info("Training model.")
+    model = __train_model(updated_meta_data)
     
-    # __figure_five_H()
+    __figure_five_H()
     __figure_five_F(save_path=BASE_DIR / 'figures/fig-5F', mice_data = pd.read_csv(BASE_DIR / 'data/averaged_gene_expression_nature_mice_supp_1.csv'))
 
     
