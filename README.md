@@ -1,7 +1,7 @@
 # OncoTerrain
-OncoTerrain enables clinicians to investigate cell phenotypes to capture intratumor heterogeneity and tumor developmental trajectories. The output of ```OncoTerrain``` can be utilized to truly investigate malignant cells as well as microenvironmental cells that exhibit abnormal phenotypes respective to their non-cancer counterparts.
-
 ![Workflow](Workflow.tiff)
+
+OncoTerrain enables clinicians to investigate cell phenotypes to capture intratumor heterogeneity and tumor developmental trajectories. The output of ```OncoTerrain``` can be utilized to truly investigate malignant cells as well as microenvironmental cells that exhibit abnormal phenotypes respective to their non-cancer counterparts.
 
 ## Overview 
 OncoTerrain is an AI/ML Model, built to support AnnData & scanpy objects. OncoTerrain is largely based on Google's Tabular Network to predict cells of origin, developmental trajectories, and cell malignancy in 10x genomics scRNA-seq data. Our paper goes into novel ligand-receptor (LR) interactions; Epithelial, Stromal, Immune cell dynamics, and demoing OncoTerrain. OncoTerrain was trained using the CELLxGENE Lung Cancer Atlas (LuCA) and the Normal Lung Atlas and applied to a variety of in-house and external scRNA-seq cohorts. All LR interactions were validated using external 10x Visium spatial RNA-seq cohorts.  
