@@ -15,7 +15,7 @@ OncoTerrain is a powerful AI/ML Model, built to support AnnData & scanpy objects
 This GitHub Repository contains all of the scripts required to preprocess and generate any of the figures in our manuscript. We have divided our codebase into easily navigable sections listed below:
 
 ```
-OncoTerrain-paper/ 
+OncoTerrain/ 
 |-- src/
 |   |-- fig-generation/
 |   |   |-- copyKAT-val.R
@@ -27,20 +27,24 @@ OncoTerrain-paper/
 |   |   |-- tcga-val.R
 |   |   |-- creating-vectors.py
 |   |   |-- figure-4-cellchat.R
-|   |-- preprocessing/
+|   |-- oncocli/
 |   |   |-- OncoTerrain.py
 |   |   |-- __init__.py
+|   |   |-- OncoTerrain.joblib
+|   |   |-- oncocli.py
+|   |-- preprocessing/
 |   |   |-- preprocessing.py
 |   |   |-- main.py
-
+|-- setup.py
+|-- MANIFEST.in
 ```
 
 Our preprocessing script has been engineered to handle other samples as well, as long as they are in the: ``` ../../data ``` respective of where the preprocessing.py script lies. NOTE: We are not making the ```src/fig-generation``` nor the ```src/TMEGPT``` available as a seperate package, as the novel functionality developed will be incorporated into the CLI. All of the code for the figures lies in ```src/fig-generation``` or in ```notebooks```, whereas all of the data cleaning, preprocessing, and exploration lies within ```src/TMEGPT```. All of the documentation (in the form of docstrings) lies within the files for futher, clear explanations. Our model has been serialized using joblib and is the method we have relied upon to share the weights of our models. Therefore, if you do not wish to use the command line interface (CLI), you may run the code snippet:
 
 ``` 
-    self.model_bundle = joblib.load("OncoTerrain.joblib")
-    self.OncoTerrain = self.model_bundle['model']
-    self.model_features = self.model_bundle['features']
+self.model_bundle = joblib.load("OncoTerrain.joblib")
+self.OncoTerrain = self.model_bundle['model']
+self.model_features = self.model_bundle['features']
 ```
 
 in order to access the features and the OncoTerrain model object. 
@@ -66,9 +70,9 @@ For a **group of 10x-style subfolders**, please run:
 - ```--output-dir```: Specifies the directory
 
 ```oncoterrain batch``` will:
-- Iterate each folder in {path/to/10x_sample_dirs}
+- Iterate each folder in ```{path/to/10x_sample_dirs}```
 - Skip any that aren’t valid 10x directories
-- Write each sample’s outputs under figures/<sample_name>_oncoterrain/
+- Write each sample’s outputs under ```{output_dir} ```
 
 ## Computing Resources
 All development was conducted on the Rutgers [Amarel HPCU](https://oarc.rutgers.edu/resources/amarel/) with 256GiB of RAM and 32 dedicated cores.
