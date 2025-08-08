@@ -1,8 +1,10 @@
 # OncoTerrain
 OncoTerrain enables clinicians to investigate cell phenotypes to capture intratumor heterogeneity and tumor developmental trajectories. The output of ```OncoTerrain``` can be utilized to truly investigate malignant cells as well as microenvironmental cells that exhibit abnormal phenotypes respective to their non-cancer counterparts.
 
+![Workflow](Workflow.png)
+
 ## Overview 
-OncoTerrain is a powerful AI/ML Model, built to support AnnData & scanpy objects. OncoTerrain is largely based on Google's Tabular Network to predict cells of origin, developmental trajectories, and cell malignancy in 10x genomics scRNA-seq data. Our paper goes into novel ligand-receptor (LR) interactions; Epithelial, Stromal, Immune cell dynamics, and demoing OncoTerrain. OncoTerrain was trained using the CELLxGENE Lung Cancer Atlas (LuCA) and the Normal Lung Atlas and applied to a variety of in-house and external scRNA-seq cohorts. All LR interactions were validated using external 10x Visium spatial RNA-seq cohorts.  
+OncoTerrain is an AI/ML Model, built to support AnnData & scanpy objects. OncoTerrain is largely based on Google's Tabular Network to predict cells of origin, developmental trajectories, and cell malignancy in 10x genomics scRNA-seq data. Our paper goes into novel ligand-receptor (LR) interactions; Epithelial, Stromal, Immune cell dynamics, and demoing OncoTerrain. OncoTerrain was trained using the CELLxGENE Lung Cancer Atlas (LuCA) and the Normal Lung Atlas and applied to a variety of in-house and external scRNA-seq cohorts. All LR interactions were validated using external 10x Visium spatial RNA-seq cohorts.  
 
 ## Highlights
 1. Gene Expression Profiles (GEPs) undergo systematic change along clonotypic lines.
@@ -53,7 +55,6 @@ in order to access the features and the OncoTerrain model object.
 We have built a command line interface (CLI) for clinicians and academics to interact with OncoTerrain. 
 
 ### Installing OncoTerrain
-
 In order to install OncoTerrain please execute the command: ```pip install oncoterrain``` and in order to see the functions and their utility, please run: ```oncoterrain --help```
 
 ### Running OncoTerrain
@@ -76,6 +77,10 @@ For a **group of 10x-style subfolders**, please run:
 
 ## Computing Resources
 All development was conducted on the Rutgers [Amarel HPCU](https://oarc.rutgers.edu/resources/amarel/) with 256GiB of RAM and 32 dedicated cores.
+
+## Team
+Contributor(s): Vignesh Venkat & Subhajyoti De, PhD
+Contact: ```vvv11@scarletmail.rutgers.edu```
 
 ## References
 If you use OncoTerrain, its methods, or its insights in your research, we kindly request you cite:
