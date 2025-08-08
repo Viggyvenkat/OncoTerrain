@@ -9,6 +9,7 @@ from sklearn.preprocessing import MinMaxScaler
 import umap
 import gseapy as gp
 import numpy as np
+import pkg_resources
 
 class OncoTerrain:
     BASE_DIR = Path.cwd()
@@ -21,7 +22,7 @@ class OncoTerrain:
                 RNA sequencing data. Defaults to None.
         """
 
-        logging.info(f"Loading trained model from {self.BASE_DIR}")
+        logging.info(f"Loading trained model")
         logging.basicConfig(level=logging.INFO)
 
         self.adata = adata
@@ -328,7 +329,11 @@ class OncoTerrain:
         self.adata = self.__hp_calculation()
         logging.info(f"After hp calculation dataset with shape: {self.adata.shape} and obs names: {self.adata.obs_names[:5]}")
 
-        self.model_bundle = joblib.load("OncoTerrain.joblib")
+        model_path = Path(
+            pkg_resources.resource_filename("oncocli", "OncoTerrain.joblib")
+        )
+        self.model_bundle = joblib.load(model_path)
+
         self.OncoTerrain = self.model_bundle['model']
         self.model_features = self.model_bundle['features']
 

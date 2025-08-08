@@ -52,7 +52,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from preprocessing.OncoTerrain import OncoTerrain
+from oncocli.OncoTerrain import OncoTerrain
 
 np.random.seed(42)
 logging.basicConfig(level=logging.INFO)
@@ -483,17 +483,31 @@ def __figure_five_H():
             logging.info(f"OncoTerrain {dir.name} processing completed successfully.")
 
 def __figure_five_F(save_path, mice_data: pd.DataFrame):
+    from pathlib import Path
+    import logging
+    import numpy as np
+    import pandas as pd
+    import scanpy as sc
+    import scprep
+    from scipy import sparse
+    from sklearn.metrics.pairwise import cosine_similarity
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
     BASE_DIR = Path.cwd()
     save_path = Path(save_path)
     save_path.mkdir(parents=True, exist_ok=True)
 
     logging.info("Starting __figure_five_F plotting function.")
     
+    # find all annotated OncoTerrain files
     oncoterrain_files = list((BASE_DIR / 'figures').glob('*_oncoterrain/OncoTerrain_annotated.h5ad'))
     
+    # determine which columns in mice_data are expression columns
     mice_columns = [col for col in mice_data.columns if col not in ['Gene', 'Human_Ortholog']]
     logging.info(f"Mice data columns for analysis: {mice_columns}")
     
+    # pick gene identifier column
     if 'Human_Ortholog' in mice_data.columns:
         gene_col = 'Human_Ortholog'
     elif 'Gene' in mice_data.columns:
@@ -501,16 +515,16 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
     else:
         raise ValueError("No gene identifier column found in mice_data")
     
-    duplicate_genes = mice_data[mice_data[gene_col].duplicated(keep=False)]
-    if not duplicate_genes.empty:
-        logging.warning(f"Found {len(duplicate_genes)} duplicate gene entries in mice data")
-        logging.info("Duplicate genes will be averaged across replicates")
+    # average duplicates
+    dup = mice_data[mice_data[gene_col].duplicated(keep=False)]
+    if not dup.empty:
+        logging.warning(f"Found {len(dup)} duplicate gene entries; averaging")
         numeric_cols = mice_data.select_dtypes(include=[np.number]).columns.tolist()
         mice_data = mice_data.groupby(gene_col)[numeric_cols].mean().reset_index()
         logging.info(f"After averaging duplicates: {len(mice_data)} unique genes")
     
     all_results = []
-    
+    # loop through each sample
     for i, file_path in enumerate(oncoterrain_files):
         full_path = BASE_DIR / file_path
         if not full_path.exists():
@@ -518,255 +532,184 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
             continue
             
         logging.info(f"Processing file {i+1}/{len(oncoterrain_files)}: {file_path}")
-        oncoterrain_obj = sc.read_h5ad(full_path)
+        adata = sc.read_h5ad(full_path)
         sample_name = Path(file_path).parent.name.split('_')[0]
 
+        # TPM normalization
         logging.info(f"Normalizing {sample_name} with TPM via scprep")
-
         try:
-            if sparse.issparse(oncoterrain_obj.X):
-                oncoterrain_obj.X = oncoterrain_obj.X.toarray()
-
-            tpm_normalized = scprep.normalize.library_size_normalize(oncoterrain_obj.X)
-            tpm_normalized *= 1e6
-
-            oncoterrain_obj.X = tpm_normalized
+            if sparse.issparse(adata.X):
+                adata.X = adata.X.toarray()
+            tpm = scprep.normalize.library_size_normalize(adata.X) * 1e6
+            adata.X = tpm
             logging.info(f"TPM normalization successful for {sample_name}")
-
         except Exception as e:
             logging.error(f"TPM normalization failed for {sample_name}: {e}")
             continue
         
-        if 'oncoterrain_class' not in oncoterrain_obj.obs.columns:
-            logging.warning(f"No 'oncoterrain_class' column found in {sample_name}, skipping...")
+        if 'oncoterrain_class' not in adata.obs.columns:
+            logging.warning(f"No 'oncoterrain_class' in {sample_name}, skipping...")
             continue
         
-        oncoterrain_classes = oncoterrain_obj.obs['oncoterrain_class'].unique()
-        logging.info(f"Found oncoterrain classes in {sample_name}: {oncoterrain_classes}")
+        classes = adata.obs['oncoterrain_class'].unique()
+        logging.info(f"Found classes in {sample_name}: {classes}")
         
-        sc_genes = set(gene.upper() for gene in oncoterrain_obj.var_names)
-        mice_genes = set(gene.upper() for gene in mice_data[gene_col].dropna())
-        common_genes = sc_genes.intersection(mice_genes)
-        
-        if len(common_genes) == 0:
-            logging.warning(f"No common genes found for {sample_name}, skipping...")
+        sc_genes = {g.upper() for g in adata.var_names}
+        mice_genes = {g.upper() for g in mice_data[gene_col].dropna()}
+        common = sc_genes & mice_genes
+        if not common:
+            logging.warning(f"No common genes for {sample_name}, skipping...")
             continue
-            
-        logging.info(f"Found {len(common_genes)} common genes for {sample_name}")
+        logging.info(f"{len(common)} common genes for {sample_name}")
         
-        sc_gene_mapping = {gene.upper(): gene for gene in oncoterrain_obj.var_names}
-        mice_gene_mapping = {gene.upper(): gene for gene in mice_data[gene_col].dropna()}
+        # mapping back to original names
+        sc_map   = {g.upper():g for g in adata.var_names}
+        mice_map = {g.upper():g for g in mice_data[gene_col].dropna()}
+        common_list = sorted(common)
+        sc_genes_sel   = [sc_map[g]   for g in common_list]
+        mice_genes_sel = [mice_map[g] for g in common_list]
         
-        common_genes_list = sorted(list(common_genes))
-        common_sc_genes = [sc_gene_mapping[gene] for gene in common_genes_list]
-        common_mice_genes = [mice_gene_mapping[gene] for gene in common_genes_list]
+        # build mice expression matrix
+        mice_dict = {
+            row[gene_col]: row[mice_columns].values
+            for _, row in mice_data.iterrows()
+            if row[gene_col] in mice_genes_sel
+        }
+        mice_mat = np.vstack([mice_dict[g] for g in mice_genes_sel])
         
-        assert len(common_sc_genes) == len(common_mice_genes)
+        # filter adata to common genes
+        adata_sub = adata[:, sc_genes_sel].copy()
         
-        mice_gene_dict = {}
-        for _, row in mice_data.iterrows():
-            gene_name = row[gene_col]
-            if gene_name in common_mice_genes:
-                mice_gene_dict[gene_name] = row[mice_columns].values
-        
-        mice_expression_matrix = np.array([mice_gene_dict[gene] for gene in common_mice_genes], dtype=float)
-        oncoterrain_filtered = oncoterrain_obj[:, common_sc_genes].copy()
-        
-        logging.info(f"After filtering: SC genes={oncoterrain_filtered.n_vars}, Mice genes={len(mice_expression_matrix)}")
-        
-        for onco_class in oncoterrain_classes:
-            class_mask = oncoterrain_obj.obs['oncoterrain_class'] == onco_class
-            class_cells = oncoterrain_filtered[class_mask, :]
-            if class_cells.n_obs == 0:
-                logging.warning(f"No cells found for class {onco_class} in {sample_name}")
+        # compute similarities per class and condition
+        for cls in classes:
+            mask = adata.obs['oncoterrain_class'] == cls
+            sub_adata = adata_sub[mask, :]
+            if sub_adata.n_obs == 0:
+                logging.warning(f"No cells in class {cls} for {sample_name}")
                 continue
             
-            class_mean_expression = np.mean(class_cells.X, axis=0)
-            if hasattr(class_mean_expression, 'A1'):
-                class_mean_expression = class_mean_expression.A1
-            class_mean_expression = np.log1p(class_mean_expression).flatten()
+            # mean expression, log1p
+            mexpr = np.log1p(np.mean(sub_adata.X, axis=0).A1 if hasattr(sub_adata.X, 'A1') else np.mean(sub_adata.X, axis=0))
             
-            for col_idx, mice_col in enumerate(mice_columns):
-                mice_expression = np.log1p(mice_expression_matrix[:, col_idx])
-
-                cosine_sim = cosine_similarity(
-                    class_mean_expression.reshape(1, -1),
-                    mice_expression.reshape(1, -1)
-                )[0, 0]
-
+            for j, cond in enumerate(mice_columns):
+                m_mouse = np.log1p(mice_mat[:, j])
+                cos_sim = cosine_similarity(mexpr.reshape(1,-1), m_mouse.reshape(1,-1))[0,0]
                 try:
-                    pearson_corr = np.corrcoef(class_mean_expression, mice_expression)[0, 1]
-                except Exception as e:
-                    logging.warning(f"Pearson correlation failed for {sample_name}, {onco_class}, {mice_col}: {e}")
-                    pearson_corr = np.nan
-
+                    pcorr = np.corrcoef(mexpr, m_mouse)[0,1]
+                except:
+                    logging.warning(f"Pearson failed for {sample_name}, {cls}, {cond}")
+                    pcorr = np.nan
+                
                 all_results.append({
                     'Sample': sample_name,
-                    'OncoTerrain_Class': onco_class,
-                    'Mice_Condition': mice_col,
-                    'Cosine_Similarity': cosine_sim,
-                    'Pearson_Correlation': pearson_corr,
-                    'Sample_Class': f"{sample_name}_{onco_class}"
+                    'OncoTerrain_Class': cls,
+                    'Mice_Condition': cond,
+                    'Cosine_Similarity': cos_sim,
+                    'Pearson_Correlation': pcorr,
+                    'Sample_Class': f"{sample_name}_{cls}"
                 })
     
     results_df = pd.DataFrame(all_results)
-    
     if results_df.empty:
-        logging.error("No results generated. Check file paths and data compatibility.")
+        logging.error("No results generated.")
         return None
     
-    logging.info(f"Generated {len(results_df)} similarity measurements")
-    
-    output_path = Path(save_path) / "figure_5F_detailed_similarities.csv"
-    results_df.to_csv(output_path, index=False)
-    logging.info(f"Detailed results saved to: {output_path}")
+    # save detailed and summary CSVs
+    csv1 = save_path / "figure_5F_detailed_similarities.csv"
+    results_df.to_csv(csv1, index=False)
+    logging.info(f"Detailed saved to {csv1}")
     
     summary_df = results_df.pivot_table(
-        index='Sample_Class', 
-        columns='Mice_Condition', 
-        values='Cosine_Similarity', 
+        index='Sample_Class',
+        columns='Mice_Condition',
+        values='Cosine_Similarity',
         aggfunc='mean'
     )
+    csv2 = save_path / "figure_5F_summary_similarities.csv"
+    summary_df.to_csv(csv2)
+    logging.info(f"Summary saved to {csv2}")
     
-    summary_path = Path(save_path) / "figure_5F_summary_similarities.csv"
-    summary_df.to_csv(summary_path)
-    logging.info(f"Summary results saved to: {summary_path}")
-    
+    # select only the conditions we care about
     selected_conditions = ['Normal Lung', 'TMet', 'TnonMet', 'Pleural DTCs']
-    selected_classes = ['Normal-like', 'Pre-malignant', 'Tumor-like']
+    filtered = results_df[results_df['Mice_Condition'].isin(selected_conditions)]
+    
+    # --- GROUPED BAR PLOTS ---
+    class_colors = {
+        'Pre-malignant': '#E4C282',
+        'Tumor-like':    '#FF8C00'
+    }
 
-    filtered_df = results_df[results_df['Mice_Condition'].isin(selected_conditions)]
+    # Cosine differences vs Normal-like
+    diffs_cos = {'Pre-malignant': [], 'Tumor-like': []}
+    for cond in selected_conditions:
+        grp = filtered[filtered['Mice_Condition']==cond]
+        m_norm = grp[grp['OncoTerrain_Class']=='Normal-like']['Cosine_Similarity'].mean()
+        m_pre  = grp[grp['OncoTerrain_Class']=='Pre-malignant']['Cosine_Similarity'].mean()
+        m_tum  = grp[grp['OncoTerrain_Class']=='Tumor-like']['Cosine_Similarity'].mean()
+        diffs_cos['Pre-malignant'].append(m_pre - m_norm)
+        diffs_cos['Tumor-like'].append(m_tum - m_norm)
 
-    if filtered_df.empty:
-        logging.error("No data available for the selected Mice Conditions. Aborting boxplot.")
-    else:
-        fig, ax = plt.subplots(figsize=(8, 8))
+    x = np.arange(len(selected_conditions))
+    width = 0.35
 
-        box_data = []
-        box_positions = []
-        box_labels = []
-        class_colors = {
-            'Normal-like': "#84A970",
-            'Pre-malignant': '#E4C282', 
-            'Tumor-like': '#FF8C00'
-        }
+    fig, ax = plt.subplots(figsize=(8,6))
+    ax.bar(x - width/2, diffs_cos['Pre-malignant'], width,
+           label='Pre-malignant vs Normal-like',
+           color=class_colors['Pre-malignant'], alpha=0.85)
+    ax.bar(x + width/2, diffs_cos['Tumor-like'], width,
+           label='Tumor-like vs Normal-like',
+           color=class_colors['Tumor-like'], alpha=0.85)
 
-        xtick_positions = []
-        xtick_labels = []
-        box_width = 0.9  
-        group_spacing = 5  
+    ax.set_xticks(x)
+    ax.set_xticklabels(selected_conditions, rotation=45, ha='right', fontsize=11)
+    ax.set_ylabel('Δ Mean Cosine Similarity', fontsize=12)
+    ax.set_title('Cosine Similarity Δ vs Normal-like', fontsize=14, fontweight='bold')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.legend(title='Comparison', frameon=False, loc='center left', bbox_to_anchor=(1.02, 0.5))
 
-        for idx, condition in enumerate(selected_conditions):
-            base_position = idx * group_spacing 
-            condition_data = filtered_df[filtered_df['Mice_Condition'] == condition]
+    plt.tight_layout()
+    path_cos = save_path / "figure_5F_barplot_cosine.png"
+    plt.savefig(path_cos, dpi=300, bbox_inches='tight')
+    plt.close()
+    logging.info(f"Cosine bar plot saved to: {path_cos}")
 
-            for j, class_name in enumerate(selected_classes):
-                class_data = condition_data[condition_data['OncoTerrain_Class'] == class_name]['Cosine_Similarity'].values
-                if len(class_data) > 0:
-                    box_data.append(class_data)
-                    box_positions.append(base_position + j)  
-                    box_labels.append(class_name)
+    # Pearson differences vs Normal-like
+    diffs_pear = {'Pre-malignant': [], 'Tumor-like': []}
+    for cond in selected_conditions:
+        grp = filtered[filtered['Mice_Condition']==cond]
+        p_norm = grp[grp['OncoTerrain_Class']=='Normal-like']['Pearson_Correlation'].mean()
+        p_pre  = grp[grp['OncoTerrain_Class']=='Pre-malignant']['Pearson_Correlation'].mean()
+        p_tum  = grp[grp['OncoTerrain_Class']=='Tumor-like']['Pearson_Correlation'].mean()
+        diffs_pear['Pre-malignant'].append(p_pre - p_norm)
+        diffs_pear['Tumor-like'].append(p_tum - p_norm)
 
-            xtick_positions.append(base_position + 1) 
-            xtick_labels.append(condition)
+    fig, ax = plt.subplots(figsize=(8,6))
+    ax.bar(x - width/2, diffs_pear['Pre-malignant'], width,
+           label='Pre-malignant vs Normal-like',
+           color=class_colors['Pre-malignant'], alpha=0.85)
+    ax.bar(x + width/2, diffs_pear['Tumor-like'], width,
+           label='Tumor-like vs Normal-like',
+           color=class_colors['Tumor-like'], alpha=0.85)
 
-        bp = ax.boxplot(
-            box_data,
-            positions=box_positions,
-            patch_artist=True,
-            widths=box_width
-        )
+    ax.set_xticks(x)
+    ax.set_xticklabels(selected_conditions, rotation=45, ha='right', fontsize=11)
+    ax.set_ylabel('Δ Mean Pearson Correlation', fontsize=12)
+    ax.set_title('Pearson Correlation Δ vs Normal-like', fontsize=14, fontweight='bold')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.legend(title='Comparison', frameon=False, loc='center left', bbox_to_anchor=(1.02, 0.5))
 
-        for patch, label in zip(bp['boxes'], box_labels):
-            patch.set_facecolor(class_colors.get(label, 'gray'))
-            patch.set_alpha(0.85)
+    plt.tight_layout()
+    path_pear = save_path / "figure_5F_barplot_pearson.png"
+    plt.savefig(path_pear, dpi=300, bbox_inches='tight')
+    plt.close()
+    logging.info(f"Pearson bar plot saved to: {path_pear}")
 
-        for median in bp['medians']:
-            median.set_color('black')
-            median.set_linewidth(2)
-
-        ax.set_xticks(xtick_positions)
-        ax.set_xticklabels(xtick_labels, rotation=45, ha='right', fontsize=11)
-        ax.set_ylabel("Cosine Similarity", fontsize=12)
-        ax.set_title("OncoTerrain Class vs Mice Conditions", fontsize=14, fontweight='bold')
-
-        ax.grid(False)
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-
-        handles = [plt.Line2D([0], [0], color=class_colors[c], lw=8) for c in selected_classes]
-        ax.legend(handles, selected_classes, title="OncoTerrain Class", frameon=False,
-                loc='center left', bbox_to_anchor=(1.02, 0.5))
-
-        grouped_boxplot_path = Path(save_path) / "figure_5F_grouped_boxplot.png"
-        plt.tight_layout()
-        plt.savefig(grouped_boxplot_path, dpi=300, bbox_inches='tight')
-        plt.close()
-        logging.info(f"Grouped box plot saved to: {grouped_boxplot_path}")
-
-        if filtered_df.empty:
-            logging.error("No data available for the selected Mice Conditions. Aborting Pearson correlation boxplot.")
-        else:
-            fig, ax = plt.subplots(figsize=(8, 8))
-
-            box_data = []
-            box_positions = []
-            box_labels = []
-
-            xtick_positions = []
-            xtick_labels = []
-
-            for idx, condition in enumerate(selected_conditions):
-                base_position = idx * group_spacing 
-                condition_data = filtered_df[filtered_df['Mice_Condition'] == condition]
-
-                for j, class_name in enumerate(selected_classes):
-                    class_data = condition_data[condition_data['OncoTerrain_Class'] == class_name]['Pearson_Correlation'].values
-                    if len(class_data) > 0:
-                        box_data.append(class_data)
-                        box_positions.append(base_position + j)
-                        box_labels.append(class_name)
-
-                xtick_positions.append(base_position + 1)
-                xtick_labels.append(condition)
-
-            bp = ax.boxplot(
-                box_data,
-                positions=box_positions,
-                patch_artist=True,
-                widths=box_width
-            )
-
-            for patch, label in zip(bp['boxes'], box_labels):
-                patch.set_facecolor(class_colors.get(label, 'gray'))
-                patch.set_alpha(0.85)
-
-            for median in bp['medians']:
-                median.set_color('black')
-                median.set_linewidth(2)
-
-            ax.set_xticks(xtick_positions)
-            ax.set_xticklabels(xtick_labels, rotation=45, ha='right', fontsize=11)
-            ax.set_ylabel("Pearson Correlation", fontsize=12)
-            ax.set_title("OncoTerrain Class vs Mice Conditions (Pearson Correlation)", fontsize=14, fontweight='bold')
-
-            ax.grid(False)
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-
-            handles = [plt.Line2D([0], [0], color=class_colors[c], lw=8) for c in selected_classes]
-            ax.legend(handles, selected_classes, title="OncoTerrain Class", frameon=False,
-                    loc='center left', bbox_to_anchor=(1.02, 0.5))
-
-            pearson_boxplot_path = Path(save_path) / "figure_5F_pearson_boxplot.png"
-            plt.tight_layout()
-            plt.savefig(pearson_boxplot_path, dpi=300, bbox_inches='tight')
-            plt.close()
-            logging.info(f"Pearson correlation box plot saved to: {pearson_boxplot_path}")
-
+    # --- HEATMAP ---
     plt.figure(figsize=(12, 8))
-    sns.heatmap(summary_df, annot=True, cmap='coolwarm', center=0, 
-               fmt='.3f', cbar_kws={'label': 'Mean Cosine Similarity'})
+    sns.heatmap(summary_df, annot=True, cmap='coolwarm', center=0,
+                fmt='.3f', cbar_kws={'label': 'Mean Cosine Similarity'})
     plt.title('Mean Cosine Similarity: OncoTerrain Classes vs Mice Conditions')
     plt.xlabel('Mice Data Conditions')
     plt.ylabel('Sample_OncoTerrain Class')
@@ -774,7 +717,7 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
     plt.yticks(rotation=0)
     plt.tight_layout()
 
-    heatmap_path = Path(save_path) / "figure_5F_heatmap.png"
+    heatmap_path = save_path / "figure_5F_heatmap.png"
     plt.savefig(heatmap_path, dpi=300, bbox_inches='tight')
     plt.close()
     logging.info(f"Heatmap saved to: {heatmap_path}")
@@ -785,56 +728,56 @@ if __name__ == '__main__':
     logging.info("Script started.")
     
     BASE_DIR = Path.cwd()
-    data_path = BASE_DIR / 'data/processed_data.h5ad'
-    logging.info(f"Reading data from {data_path}")
-    adata = sc.read_h5ad(filename=str(data_path))
+    # data_path = BASE_DIR / 'data/processed_data.h5ad'
+    # logging.info(f"Reading data from {data_path}")
+    # adata = sc.read_h5ad(filename=str(data_path))
     
-    logging.info("Copying and preprocessing metadata.")
-    meta_data = adata.obs.copy()
-    meta_data.columns = meta_data.columns.str.replace('^HALLMARK_', '', regex=True)
+    # logging.info("Copying and preprocessing metadata.")
+    # meta_data = adata.obs.copy()
+    # meta_data.columns = meta_data.columns.str.replace('^HALLMARK_', '', regex=True)
     
-    meta_data = meta_data.drop(columns= ['disease', 'sample', 'source', 'tissue', 'n_genes', 'batch', 
-                               'n_genes_by_counts', 'total_counts', 'total_counts_mt', 'pct_counts_mt', 'leiden_res_0.10', 
-                               'leiden_res_1.00', 'leiden_res_5.00', 'leiden_res_10.00', 'leiden_res_20.00', 'leiden_res_0.10_celltype',
-                               'leiden_res_1.00_celltype', 'leiden_res_5.00_celltype', 'leiden_res_10.00_celltype'])
+    # meta_data = meta_data.drop(columns= ['disease', 'sample', 'source', 'tissue', 'n_genes', 'batch', 
+    #                            'n_genes_by_counts', 'total_counts', 'total_counts_mt', 'pct_counts_mt', 'leiden_res_0.10', 
+    #                            'leiden_res_1.00', 'leiden_res_5.00', 'leiden_res_10.00', 'leiden_res_20.00', 'leiden_res_0.10_celltype',
+    #                            'leiden_res_1.00_celltype', 'leiden_res_5.00_celltype', 'leiden_res_10.00_celltype'])
 
-    logging.info("Running feature analysis preprocessing.")
-    updated_meta_data, _, _ = __feature_analysis_w_preprocessing(meta_data)
+    # logging.info("Running feature analysis preprocessing.")
+    # updated_meta_data, _, _ = __feature_analysis_w_preprocessing(meta_data)
     
-    hallmark_list = updated_meta_data.columns[~updated_meta_data.columns.isin(['tumor_stage', 'project', 'leiden_res_20.00_celltype'])]
-    logging.info(f"Identified hallmark features: {list(hallmark_list)}")
+    # hallmark_list = updated_meta_data.columns[~updated_meta_data.columns.isin(['tumor_stage', 'project', 'leiden_res_20.00_celltype'])]
+    # logging.info(f"Identified hallmark features: {list(hallmark_list)}")
     
-    features = updated_meta_data.drop(columns=['tumor_stage', 'leiden_res_20.00_celltype', 'project'])
-    tumor_stage = updated_meta_data['tumor_stage']
+    # features = updated_meta_data.drop(columns=['tumor_stage', 'leiden_res_20.00_celltype', 'project'])
+    # tumor_stage = updated_meta_data['tumor_stage']
     
-    logging.info("Initializing UMAP reducer with parameters: n_neighbors=50, min_dist=0.05, metric='euclidean'")
-    reducer = umap.UMAP(n_neighbors=50, min_dist=0.05, metric='euclidean', random_state=42)
+    # logging.info("Initializing UMAP reducer with parameters: n_neighbors=50, min_dist=0.05, metric='euclidean'")
+    # reducer = umap.UMAP(n_neighbors=50, min_dist=0.05, metric='euclidean', random_state=42)
     
-    logging.info("Fitting UMAP to features and transforming.")
-    embedding = reducer.fit_transform(features)
-    logging.info("UMAP embedding shape: %s", embedding.shape)
+    # logging.info("Fitting UMAP to features and transforming.")
+    # embedding = reducer.fit_transform(features)
+    # logging.info("UMAP embedding shape: %s", embedding.shape)
     
-    fig5B_path = BASE_DIR / 'figures/fig-5B.png'
-    fig5C_path = BASE_DIR / 'figures/fig-5C'
-    fig5D_path = BASE_DIR / 'figures/fig-5D.png'
-    fig5E_path = BASE_DIR / 'figures/fig-5E.png'
+    # fig5B_path = BASE_DIR / 'figures/fig-5B.png'
+    # fig5C_path = BASE_DIR / 'figures/fig-5C'
+    # fig5D_path = BASE_DIR / 'figures/fig-5D.png'
+    # fig5E_path = BASE_DIR / 'figures/fig-5E.png'
     
-    logging.info("Generating figure 5B.")
-    __figure_five_B(updated_meta_data, save_path=str(fig5B_path), embedding=embedding)
+    # logging.info("Generating figure 5B.")
+    # __figure_five_B(updated_meta_data, save_path=str(fig5B_path), embedding=embedding)
     
-    logging.info("Generating figure 5C.")
-    __figure_five_C(updated_meta_data, save_path=str(fig5C_path), embedding=embedding, hallmark_list=hallmark_list)
+    # logging.info("Generating figure 5C.")
+    # __figure_five_C(updated_meta_data, save_path=str(fig5C_path), embedding=embedding, hallmark_list=hallmark_list)
     
-    logging.info("Generating figure 5D.")
-    __figure_five_D(updated_meta_data, save_path=str(fig5D_path))
+    # logging.info("Generating figure 5D.")
+    # __figure_five_D(updated_meta_data, save_path=str(fig5D_path))
     
-    logging.info("Generating figure 5E.")
-    figure_five_E(updated_meta_data, save_path=str(fig5E_path))
+    # logging.info("Generating figure 5E.")
+    # figure_five_E(updated_meta_data, save_path=str(fig5E_path))
     
-    logging.info("Training model.")
-    model = __train_model(updated_meta_data)
+    # logging.info("Training model.")
+    # model = __train_model(updated_meta_data)
     
-    __figure_five_H()
+    # __figure_five_H()
     __figure_five_F(save_path=BASE_DIR / 'figures/fig-5F', mice_data = pd.read_csv(BASE_DIR / 'data/averaged_gene_expression_nature_mice_supp_1.csv'))
 
     

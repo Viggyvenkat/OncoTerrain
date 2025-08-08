@@ -35,7 +35,7 @@ OncoTerrain-paper/
 
 ```
 
-Our preprocessing script has been engineered to handle other samples as well, as long as they are in the: ``` ../../data ``` respective of where the preprocessing.py script lies. All of the code for the figures lies in ```src/fig-generation``` or in ```notebooks```, whereas all of the data cleaning, preprocessing, and exploration lies within ```src/TMEGPT```. All of the documentation (in the form of docstrings) lies within the files for futher, clear explanations. Our model has been serialized using joblib and is the method we have relied upon to share the weights of our models. Therefore, if you do not wish to use the command line interface (CLI), you may run the script
+Our preprocessing script has been engineered to handle other samples as well, as long as they are in the: ``` ../../data ``` respective of where the preprocessing.py script lies. NOTE: We are not making the ```src/fig-generation``` nor the ```src/TMEGPT``` available as a seperate package, as the novel functionality developed will be incorporated into the CLI. All of the code for the figures lies in ```src/fig-generation``` or in ```notebooks```, whereas all of the data cleaning, preprocessing, and exploration lies within ```src/TMEGPT```. All of the documentation (in the form of docstrings) lies within the files for futher, clear explanations. Our model has been serialized using joblib and is the method we have relied upon to share the weights of our models. Therefore, if you do not wish to use the command line interface (CLI), you may run the code snippet:
 
 ``` 
     self.model_bundle = joblib.load("OncoTerrain.joblib")
@@ -43,14 +43,13 @@ Our preprocessing script has been engineered to handle other samples as well, as
     self.model_features = self.model_bundle['features']
 ```
 
-in order to access the features required as well as the OncoTerrain model object. 
+in order to access the features and the OncoTerrain model object. 
 
 ## OncoTerrain CLI 
 We have built a command line interface (CLI) for clinicians and academics to interact with OncoTerrain. 
 
-
 ## Computing Resources
-All development was conducted on the Rutgers [Amarel HPCU](https://oarc.rutgers.edu/resources/amarel/) with 256GiB of RAM and 32 dedicated cores
+All development was conducted on the Rutgers [Amarel HPCU](https://oarc.rutgers.edu/resources/amarel/) with 256GiB of RAM and 32 dedicated cores.
 
 ## References
 If you use OncoTerrain, its methods, or its insights in your research, we kindly request you cite:
