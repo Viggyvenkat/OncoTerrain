@@ -10,6 +10,7 @@ import umap
 import gseapy as gp
 import numpy as np
 import pkg_resources
+from pytorch_tabnet.tab_model import TabNetClassifier
 
 class OncoTerrain:
     BASE_DIR = Path.cwd()

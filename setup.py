@@ -19,6 +19,8 @@ setup(
         "joblib",
         "numpy",
         "scikit-learn",
+        "igraph",
+        "pytorch_tabnet",
     ],
     include_package_data=True,
     package_data={
