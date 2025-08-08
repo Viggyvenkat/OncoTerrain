@@ -42,11 +42,11 @@ OncoTerrain/
 |-- MANIFEST.in
 ```
 
-Our preprocessing pipeline is robust and supports additional datasets, as long as they are placed in the ```../../data/ directory``` relative to ```preprocessing.py```. \
+Our preprocessing pipeline is robust and supports additional datasets, as long as they are placed in the ```../../data/ directory``` relative to ```preprocessing.py```. 
 
-**Note:** We are not distributing the contents of ```src/fig-generation``` or ```src/TMEGPT``` as standalone packages, as these modules are tightly integrated into the CLI. Figure generation scripts live under ```src/fig-generation``` and exploratory/data cleaning scripts are located within ```src/TMEGPT```. \
+**Note:** We are not distributing the contents of ```src/fig-generation``` or ```src/TMEGPT``` as standalone packages, as these modules are tightly integrated into the CLI. Figure generation scripts live under ```src/fig-generation``` and exploratory/data cleaning scripts are located within ```src/TMEGPT```. 
 
-Documentation is provided via **docstrings** throughout the codebase for clarity. The trained model is serialized using ```joblib```, enabling easy reuse and sharing of the model state. If you do not wish to use the CLI, you can load the model and access its components as follows: \
+Documentation is provided via **docstrings** throughout the codebase for clarity. The trained model is serialized using ```joblib```, enabling easy reuse and sharing of the model state. If you do not wish to use the CLI, you can load the model and access its components as follows: 
 
 ``` 
 self.model_bundle = joblib.load("OncoTerrain.joblib")
@@ -60,10 +60,10 @@ in order to access the features and the OncoTerrain model object.
 We’ve built a CLI to help clinicians and researchers easily interact with OncoTerrain from the terminal.
 
 ### Installation
-To install OncoTerrain, simply run: \
-```pip install oncoterrain``` \
+To install OncoTerrain, simply run: 
+```pip install oncoterrain``` 
 
-To view all available commands and usage options, run: \
+To view all available commands and usage options, run: 
 ```oncoterrain --help``` 
 
 ### Running OncoTerrain
