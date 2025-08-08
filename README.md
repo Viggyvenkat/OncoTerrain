@@ -48,6 +48,28 @@ in order to access the features and the OncoTerrain model object.
 ## OncoTerrain CLI 
 We have built a command line interface (CLI) for clinicians and academics to interact with OncoTerrain. 
 
+### Installing OncoTerrain
+
+In order to install OncoTerrain please execute the command: ```pip install oncoterrain``` and in order to see the functions and their utility, please run: ```oncoterrain --help```
+
+### Running OncoTerrain
+
+For a **single sample** in either 10x or adata format, please run: 
+
+``` oncoterrain infer {path/to/10x_sample_dir} --output-dir {output_dir} --no-save-adata```
+- ```--output-dir```: Specifies the directory
+- ```--no-save-adata```: If this flag is present then the adata will not be saved to output_dir
+
+For a **group of 10x-style subfolders**, please run:
+
+```oncoterrain batch {path/to/10x_sample_dirs} --output-dir {output_dir}  ```
+- ```--output-dir```: Specifies the directory
+
+```oncoterrain batch``` will:
+- Iterate each folder in {path/to/10x_sample_dirs}
+- Skip any that aren’t valid 10x directories
+- Write each sample’s outputs under figures/<sample_name>_oncoterrain/
+
 ## Computing Resources
 All development was conducted on the Rutgers [Amarel HPCU](https://oarc.rutgers.edu/resources/amarel/) with 256GiB of RAM and 32 dedicated cores.
 
