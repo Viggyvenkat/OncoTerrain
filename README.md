@@ -6,14 +6,14 @@ OncoTerrain enables clinicians to investigate cell phenotypes to capture intratu
 ## Overview 
 OncoTerrain is an AI/ML Model, built to support AnnData & scanpy objects. OncoTerrain is largely based on Google's Tabular Network to predict cells of origin, developmental trajectories, and cell malignancy in 10x genomics scRNA-seq data. Our paper goes into novel ligand-receptor (LR) interactions; Epithelial, Stromal, Immune cell dynamics, and demoing OncoTerrain. OncoTerrain was trained using the CELLxGENE Lung Cancer Atlas (LuCA) and the Normal Lung Atlas and applied to a variety of in-house and external scRNA-seq cohorts. All LR interactions were validated using external 10x Visium spatial RNA-seq cohorts.  
 
-## Highlights
+## Highlights 🌠
 1. Neoplastic Gene Expression Profiles (GEPs) **evolve along clonotypic differentiation**; whilst non-neoplastic GEPs cannot be phylogenically grouped through a clonotypic lens.
 2. Major oncogenic drivers i.e. RAS and EGFr-driven NSCLC samples **experience perturbation to hallmark pathways** such as Cell Cycle, Apoptotis, and Epithelial-Mesenchymel transition. 
 3. **NSCLC tumors remodel their microenvironment**, often upregulating STAT4, CCR7, LAG3 in Lymphoid cells and FAP, ACTA2, COL1A1 in Fibroblast cells. 
 4. We observed systemic change to the **MIF ligand's interaction with CD74, CD44, CXCR4 receptors** as well as the **ANAX1-FPR1**, **PPIA-BSG** axes through tumorigenesis.
 5. OncoTerrain can identify malignant tumor, abnormal immune/stromal cells to aide in downstream scRNA-seq analytics, rapidly, accurately, and **seamlessly into AnnData-based workflows** without having to compute copy number alterations (CNAs). 
 
-## How to Navigate
+## How to Navigate 🔄
 This GitHub Repository contains all of the scripts required to preprocess and generate any of the figures in our manuscript. We have divided our codebase into easily navigable sections listed below:
 
 ```
@@ -51,7 +51,7 @@ self.model_features = self.model_bundle['features']
 
 in order to access the features and the OncoTerrain model object. 
 
-## OncoTerrain CLI 
+## OncoTerrain CLI 🖥️
 We have built a command line interface (CLI) for clinicians and academics to interact with OncoTerrain. 
 
 ### Installing OncoTerrain
@@ -75,14 +75,14 @@ For a **group of 10x-style subfolders**, please run:
 - Skip any that aren’t valid 10x directories
 - Write each sample’s outputs under ```{output_dir} ```
 
-## Computing Resources
+## Computing Resources 💻
 All development was conducted on the Rutgers [Amarel HPCU](https://oarc.rutgers.edu/resources/amarel/) with 256GiB of RAM and 32 dedicated cores.
 
-## Team
+## Team 👥
 Contributor(s): Vignesh Venkat & Subhajyoti De, PhD
 Contact: ```vvv11@scarletmail.rutgers.edu```
 
-## References
+## References 📄
 If you use OncoTerrain, its methods, or its insights in your research, we kindly request you cite:
 1. Hu, X. et al. Deconstructing evolutionary histories of complex rearrangements during tumorigenesis in lung. bioRxiv
 2. Venkat, V. et al. Disruptive changes in tissue microenvironment prime oncogenic processes at different stages of carcinogenesis in lung. bioRxiv, 1-20 (2024). 
