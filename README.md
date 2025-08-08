@@ -1,20 +1,21 @@
 # OncoTerrain
 ![Workflow](Workflow.tiff)
 
-OncoTerrain enables clinicians to investigate cell phenotypes to capture intratumor heterogeneity and tumor developmental trajectories. The output of ```OncoTerrain``` can be utilized to truly investigate malignant cells as well as microenvironmental cells that exhibit abnormal phenotypes respective to their non-cancer counterparts.
+```OncoTerrain``` enables clinicians to investigate cellular phenotypes to capture intratumor heterogeneity and developmental trajectories within tumors. It offers a framework to interrogate not only malignant cells, but also microenvironmental populations that exhibit aberrant phenotypes relative to their non-cancerous counterparts.
 
 ## Overview 
-OncoTerrain is an AI/ML Model, built to support AnnData & scanpy objects. OncoTerrain is largely based on Google's Tabular Network to predict cells of origin, developmental trajectories, and cell malignancy in 10x genomics scRNA-seq data. Our paper goes into novel ligand-receptor (LR) interactions; Epithelial, Stromal, Immune cell dynamics, and demoing OncoTerrain. OncoTerrain was trained using the CELLxGENE Lung Cancer Atlas (LuCA) and the Normal Lung Atlas and applied to a variety of in-house and external scRNA-seq cohorts. All LR interactions were validated using external 10x Visium spatial RNA-seq cohorts.  
+```OncoTerrain``` is an AI/ML model designed to integrate seamlessly with **AnnData** and Scanpy objects. It is primarily built upon Google’s Tabular Network architecture to predict cell-of-origin, developmental pathways, and cell malignancy in 10x Genomics scRNA-seq datasets.
+Our manuscript introduces novel insights into ligand-receptor (LR) interactions, epithelial, stromal, and immune cell dynamics, along with practical demonstrations of OncoTerrain. The model was trained using data from the **CELLxGENE Lung Cancer Atlas (LuCA)** and the **Normal Lung Atlas**, and validated across a diverse range of internal and external scRNA-seq cohorts. All LR interactions were further validated using external 10x Visium spatial transcriptomics datasets.
 
 ## Highlights 🌠
-1. Neoplastic Gene Expression Profiles (GEPs) **evolve along clonotypic differentiation**; whilst non-neoplastic GEPs cannot be phylogenically grouped through a clonotypic lens.
-2. Major oncogenic drivers i.e. RAS and EGFr-driven NSCLC samples **experience perturbation to hallmark pathways** such as Cell Cycle, Apoptotis, and Epithelial-Mesenchymel transition. 
-3. **NSCLC tumors remodel their microenvironment**, often upregulating STAT4, CCR7, LAG3 in Lymphoid cells and FAP, ACTA2, COL1A1 in Fibroblast cells. 
-4. We observed systemic change to the **MIF ligand's interaction with CD74, CD44, CXCR4 receptors** as well as the **ANAX1-FPR1**, **PPIA-BSG** axes through tumorigenesis.
-5. OncoTerrain can identify malignant tumor, abnormal immune/stromal cells to aide in downstream scRNA-seq analytics, rapidly, accurately, and **seamlessly into AnnData-based workflows** without having to compute copy number alterations (CNAs). 
+1. **Neoplastic gene expression profiles (GEPs)** evolve clonotypically, reflecting differentiation along tumor-specific trajectories. In contrast, non-neoplastic GEPs lack phylogenetic structure under a clonotypic framework.
+2. In NSCLC samples driven by oncogenes such as **RAS** and **EGFR**, we observe consistent perturbations in hallmark pathways, including **cell cycle, apoptosis, and epithelial–mesenchymal transition (EMT).**
+3. **NSCLC tumors actively remodel their microenvironment**, commonly upregulating **STAT4, CCR7, LAG3** in lymphoid cells and **FAP, ACTA2, COL1A1** in fibroblast populations.
+4. Tumorigenesis induces systemic rewiring of key LR interactions, most notably the **MIF–CD74/CD44/CXCR4** axis, the **ANXA1–FPR1**, and **PPIA–BSG** axes.
+5. **OncoTerrain can accurately identify malignant tumor cells and abnormal stromal/immune populations**, enabling robust downstream scRNA-seq analyses—without relying on copy number alteration (CNA) inference. It integrates seamlessly into existing **AnnData-based** workflows 
 
 ## How to Navigate 🔄
-This GitHub Repository contains all of the scripts required to preprocess and generate any of the figures in our manuscript. We have divided our codebase into easily navigable sections listed below:
+This GitHub repository contains all the scripts necessary to preprocess data and reproduce figures presented in our manuscript. The codebase is structured into the following key directories:
 
 ```
 OncoTerrain/ 
@@ -41,7 +42,11 @@ OncoTerrain/
 |-- MANIFEST.in
 ```
 
-Our preprocessing script has been engineered to handle other samples as well, as long as they are in the: ``` ../../data ``` respective of where the preprocessing.py script lies. NOTE: We are not making the ```src/fig-generation``` nor the ```src/TMEGPT``` available as a seperate package, as the novel functionality developed will be incorporated into the CLI. All of the code for the figures lies in ```src/fig-generation``` or in ```notebooks```, whereas all of the data cleaning, preprocessing, and exploration lies within ```src/TMEGPT```. All of the documentation (in the form of docstrings) lies within the files for futher, clear explanations. Our model has been serialized using joblib and is the method we have relied upon to share the weights of our models. Therefore, if you do not wish to use the command line interface (CLI), you may run the code snippet:
+Our preprocessing pipeline is robust and supports additional datasets, as long as they are placed in the ```../../data/ directory``` relative to ```preprocessing.py```. \
+
+**Note:** We are not distributing the contents of ```src/fig-generation``` or ```src/TMEGPT``` as standalone packages, as these modules are tightly integrated into the CLI. Figure generation scripts live under ```src/fig-generation``` and exploratory/data cleaning scripts are located within ```src/TMEGPT```. \
+
+Documentation is provided via **docstrings** throughout the codebase for clarity. The trained model is serialized using ```joblib```, enabling easy reuse and sharing of the model state. If you do not wish to use the CLI, you can load the model and access its components as follows: \
 
 ``` 
 self.model_bundle = joblib.load("OncoTerrain.joblib")
@@ -52,10 +57,14 @@ self.model_features = self.model_bundle['features']
 in order to access the features and the OncoTerrain model object. 
 
 ## OncoTerrain CLI 🖥️
-We have built a command line interface (CLI) for clinicians and academics to interact with OncoTerrain. 
+We’ve built a CLI to help clinicians and researchers easily interact with OncoTerrain from the terminal.
 
-### Installing OncoTerrain
-In order to install OncoTerrain please execute the command: ```pip install oncoterrain``` and in order to see the functions and their utility, please run: ```oncoterrain --help```
+### Installation
+To install OncoTerrain, simply run: \
+```pip install oncoterrain``` \
+
+To view all available commands and usage options, run: \
+```oncoterrain --help``` 
 
 ### Running OncoTerrain
 
@@ -76,11 +85,11 @@ For a **group of 10x-style subfolders**, please run:
 - Write each sample’s outputs under ```{output_dir} ```
 
 ## Computing Resources 💻
-All development was conducted on the Rutgers [Amarel HPCU](https://oarc.rutgers.edu/resources/amarel/) with 256GiB of RAM and 32 dedicated cores.
+All development and model training were conducted on the Rutgers [Amarel HPCU](https://oarc.rutgers.edu/resources/amarel/) using nodes equipped with 256 GiB RAM and 32 dedicated CPU cores.
 
 ## Team 👥
-Contributor(s): Vignesh Venkat & Subhajyoti De, PhD
-Contact: ```vvv11@scarletmail.rutgers.edu```
+**Contributor(s):** Vignesh Venkat & Subhajyoti De, PhD \
+**Contact:** ```vvv11@scarletmail.rutgers.edu```
 
 ## References 📄
 If you use OncoTerrain, its methods, or its insights in your research, we kindly request you cite:
