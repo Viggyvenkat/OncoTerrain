@@ -7,11 +7,11 @@ OncoTerrain enables clinicians to investigate cell phenotypes to capture intratu
 OncoTerrain is an AI/ML Model, built to support AnnData & scanpy objects. OncoTerrain is largely based on Google's Tabular Network to predict cells of origin, developmental trajectories, and cell malignancy in 10x genomics scRNA-seq data. Our paper goes into novel ligand-receptor (LR) interactions; Epithelial, Stromal, Immune cell dynamics, and demoing OncoTerrain. OncoTerrain was trained using the CELLxGENE Lung Cancer Atlas (LuCA) and the Normal Lung Atlas and applied to a variety of in-house and external scRNA-seq cohorts. All LR interactions were validated using external 10x Visium spatial RNA-seq cohorts.  
 
 ## Highlights
-1. Gene Expression Profiles (GEPs) undergo systematic change along clonotypic lines.
+1. Neoplastic Gene Expression Profiles (GEPs) **evolve along clonotypic differentiation**; whilst non-neoplastic GEPs cannot be phylogenically grouped through a clonotypic lens.
 2. Major oncogenic drivers i.e. RAS and EGFr-driven NSCLC samples **experience perturbation to hallmark pathways** such as Cell Cycle, Apoptotis, and Epithelial-Mesenchymel transition. 
 3. **NSCLC tumors remodel their microenvironment**, often upregulating STAT4, CCR7, LAG3 in Lymphoid cells and FAP, ACTA2, COL1A1 in Fibroblast cells. 
 4. We observed systemic change to the **MIF ligand's interaction with CD74, CD44, CXCR4 receptors** as well as the **ANAX1-FPR1**, **PPIA-BSG** axes through tumorigenesis.
-5. OncoTerrain can identify malignant cells, to aide in downstream scRNA-seq analytics, rapidly, accurately, and **seamlessly into AnnData-based workflows**. 
+5. OncoTerrain can identify malignant tumor, abnormal immune/stromal cells to aide in downstream scRNA-seq analytics, rapidly, accurately, and **seamlessly into AnnData-based workflows** without having to compute copy number alterations (CNAs). 
 
 ## How to Navigate
 This GitHub Repository contains all of the scripts required to preprocess and generate any of the figures in our manuscript. We have divided our codebase into easily navigable sections listed below:
@@ -61,7 +61,7 @@ In order to install OncoTerrain please execute the command: ```pip install oncot
 
 For a **single sample** in either 10x or adata format, please run: 
 
-``` oncoterrain infer {path/to/10x_sample_dir} --output-dir {output_dir} --no-save-adata```
+```oncoterrain infer {path/to/10x_sample_dir} --output-dir {output_dir} --no-save-adata```
 - ```--output-dir```: Specifies the directory
 - ```--no-save-adata```: If this flag is present then the adata will not be saved to output_dir
 
