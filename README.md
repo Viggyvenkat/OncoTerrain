@@ -1,6 +1,6 @@
 # OncoTerrain
 
-![Workflow](assets/Workflow.png)
+![Workflow](assets/Workflow.tiff)
 
 **OncoTerrain** enables clinicians to investigate cellular phenotypes to capture intratumor heterogeneity and developmental trajectories within tumors. It provides a reproducible, pathway-aware framework for exploring both malignant and non-malignant cell populations.
 
