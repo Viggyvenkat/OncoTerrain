@@ -23,16 +23,19 @@ The model was trained using **CELLxGENE Lung Cancer Atlas (LuCA)** and the **Nor
 ``` pip install oncoterrain ```
 
 ## 🏛 Directory Structure 
-OncoTerrain/ \ 
-|-- src/ \ 
-|   |-- oncocli/ \ 
-|   |   |-- OncoTerrain.py \ 
-|   |   |-- __init__.py \ 
-|   |-- preprocessing/ \ 
-|   |   |-- preprocessing.py \ 
-|   |   |-- main.py \ 
-|-- setup.py \ 
-|-- MANIFEST.in \ 
+
+```
+OncoTerrain/ 
+|-- src/ 
+|   |-- oncocli/ 
+|   |   |-- OncoTerrain.py 
+|   |   |-- __init__.py 
+|   |-- preprocessing/  
+|   |   |-- preprocessing.py 
+|   |   |-- main.py 
+|-- setup.py 
+|-- MANIFEST.in
+```
 
 ### 📘 Tutorials & Vignettes
 For complete tutorials and end-to-end examples, visit the vignettes directory
