@@ -51,5 +51,5 @@ Contact: vvv11@scarletmail.rutgers.edu
 - Hu X. et al. Deconstructing evolutionary histories of complex rearrangements during tumorigenesis in lung. bioRxiv.
 - Venkat V. et al. Disruptive changes in tissue microenvironment prime oncogenic processes at different stages of carcinogenesis in lung. bioRxiv (2024).
 
-### 🙏 Acknowledgements
+### Acknowledgements
 We thank colleagues at the Rutgers Cancer Institute and members of the De Laboratory for their guidance and support.
