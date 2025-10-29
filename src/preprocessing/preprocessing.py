@@ -13,20 +13,17 @@ import pandas as pd
 import numpy as np
 import gseapy as gp
 from pathlib import Path
-from Graph import Node, Edge, Graph
 from cellphonedb.src.core.methods import cpdb_statistical_analysis_method
-import pickle
 import concurrent.futures
-from py_monocle import (learn_graph, order_cells, compute_cell_states, regression_analysis, 
-                         differential_expression_genes,)
-import infercnvpy as cnv
+from py_monocle import (learn_graph, order_cells, compute_cell_states, regression_analysis, differential_expression_genes)
 from matplotlib.colors import LinearSegmentedColormap
 from scipy import sparse
 import matplotlib.patches as mpatches
-import matplotlib.colors as mcolors
-import glob
+from threadpoolctl import threadpool_limits
+from scipy.sparse import issparse
+from scipy.sparse import triu as sp_triu
 
-
+sc.settings.n_jobs = 16
 BASE_DIR = Path.cwd()
 
 logging.basicConfig(
@@ -65,7 +62,7 @@ class PreprocessingPipeline:
         logging.info(f"Found {len(self.sample_dirs)} sample directories")
     
     @staticmethod
-    def __load_h5ad_file(fpath):
+    def _load_h5ad_file(fpath):
         """
         Loads a .h5ad file into memory and standardizes its metadata.
 
@@ -88,15 +85,26 @@ class PreprocessingPipeline:
             ad = sc.read_h5ad(fpath).to_memory()
             sample_id = os.path.splitext(os.path.basename(fpath))[0]
 
+            # --- special-case: force normal / non-cancer for the control file
+            control_uuid = "b351804c-293e-4aeb-9c4c-043db67f4540"
+            if control_uuid in os.path.normpath(fpath):
+                ad.obs["disease"] = "normal"
+                ad.obs["tumor_stage"] = "non-cancer"
+                logging.info("Annotated control file as disease=normal, tumor_stage=non-cancer")
+
             if 'tumor_stage' not in ad.obs.columns:
                 ad.obs['tumor_stage'] = np.nan
 
+            # If disease not present, leave it; above block sets it for the control file
             ad.obs['sample']  = ad.obs.get('sample', sample_id)
             ad.obs['source']  = fpath
             ad.obs['project'] = ad.obs.get('project', sample_id)
 
             if 'batch' in ad.obs.columns:
                 ad.obs['batch'] = ad.obs['batch'].astype(str)
+
+            # Ensure string indices
+            ad.obs.index = ad.obs.index.astype(str)
 
             return ad
 
@@ -294,7 +302,7 @@ class PreprocessingPipeline:
         with concurrent.futures.ProcessPoolExecutor(max_workers=16) as executor:
             futures = []
             for fpath in root_h5ad_files:
-                futures.append(executor.submit(PreprocessingPipeline.__load_h5ad_file, fpath))
+                futures.append(executor.submit(PreprocessingPipeline._load_h5ad_file, fpath))
             for sample_dir in self.sample_dirs:
                 futures.append(executor.submit(PreprocessingPipeline._load_sample_dir, sample_dir))
 
@@ -406,6 +414,61 @@ class PreprocessingPipeline:
         self.adata.obs.index = self.adata.obs.index.astype(str)
         self.adata.var.index = self.adata.var.index.astype(str)
 
+        if 'disease' in self.adata.obs.columns:
+            disease_raw = self.adata.obs['disease'].astype(str).str.strip().str.lower()
+
+            normalize_map = {
+                'luad': 'lung adenocarcinoma',
+                'lung_adenocarcinoma': 'lung adenocarcinoma',
+                'lung adenocarcinoma': 'lung adenocarcinoma',
+                'adenocarcinoma': 'lung adenocarcinoma',
+                'normal lung': 'normal',
+                'healthy': 'normal',
+                'control': 'normal',
+                'normal': 'normal',
+            }
+            disease_norm = disease_raw.map(lambda x: normalize_map.get(x, x))
+            keep_labels = {'normal', 'lung adenocarcinoma'}
+            mask = disease_norm.isin(keep_labels)
+
+            n_before = int(self.adata.n_obs)
+            if mask.any():
+                self.adata = self.adata[mask, :].copy()
+                n_after = int(self.adata.n_obs)
+                logging.info(
+                    f"Subset to disease in {keep_labels}: kept {n_after}/{n_before} cells "
+                    f"({n_before - n_after} removed)."
+                )
+            else:
+                logging.warning(
+                    "No cells matched disease in {'normal', 'lung adenocarcinoma'}; "
+                    "proceeding without subsetting."
+                )
+        else:
+            logging.warning(
+                "Column 'disease' not found in adata.obs; proceeding without subsetting."
+            )
+        
+        if "tumor_stage" in self.adata.obs.columns:
+            if not self.adata.obs_names.is_unique:
+                self.adata.obs_names_make_unique()
+            s = self.adata.obs["tumor_stage"].astype("string").str.strip()
+
+            bad = s.isna() | s.str.casefold().eq("nan")
+            n_before = int(self.adata.n_obs)
+            self.adata.obs["tumor_stage"] = s
+
+            keep = (~bad).to_numpy(dtype=bool)
+            self.adata = self.adata[keep, :].copy()
+
+            n_after = int(self.adata.n_obs)
+            logging.info(
+                f"Removed cells without usable tumor_stage: kept {n_after}/{n_before} cells "
+                f"({n_before - n_after} removed)."
+            )
+        else:
+            logging.warning("Column 'tumor_stage' not found in adata.obs; proceeding without filtering.")
+
         self.adata.var['mt'] = self.adata.var_names.str.startswith('MT-')
         sc.pp.calculate_qc_metrics(
             self.adata,
@@ -451,13 +514,22 @@ class PreprocessingPipeline:
             raise ValueError("Data not preprocessed. Run preprocessing() first.")
         os.makedirs("../figures", exist_ok=True)
         os.makedirs("../data", exist_ok=True)
-        sc.tl.pca(self.adata, svd_solver='arpack')
-        sc.external.pp.bbknn(self.adata, batch_key='batch')
-        sc.tl.umap(self.adata)
-        resolutions = [0.1, 1, 5, 10, 20]
+
+        with threadpool_limits(limits= 16):
+            logging.info("Running PCA")
+            sc.tl.pca(self.adata, svd_solver='arpack')
+
+            logging.info("Running BBKNN integration")
+            sc.external.pp.bbknn(self.adata, batch_key='batch')
+
+            logging.info("Computing UMAP")
+            sc.tl.umap(self.adata)
+
+        resolutions = [0.1, 0.5, 1, 2, 5, 10, 20]
         for res in resolutions:
             key = f"leiden_res_{res:4.2f}"
             sc.tl.leiden(self.adata, key_added=key, resolution=res, flavor="igraph")
+
         marker_genes = {
             "NK cells": ["GZMA", "CD7", "CCL4", "CST7", "NKG7", "GNLY", "CTSW", "CCL5", "GZMB", "PRF1"],
             "AT2": ["SEPP1", "PGC", "NAPSA", "SFTPD", "SLC34A2", "CYB5A", "MUC1", "S100A14", "SFTA2", "SFTA3"],
@@ -529,7 +601,7 @@ class PreprocessingPipeline:
         for res in resolutions:
             cluster_key = f"leiden_res_{res:4.2f}"
             logging.debug(f"Annotating clusters with {cluster_key}")
-            annotation = self.__annotate_clusters_by_markers(self.adata, cluster_key, filtered_marker_genes)
+            annotation = self._annotate_clusters_by_markers(self.adata, cluster_key, filtered_marker_genes)
             self.adata.obs[f"{cluster_key}_celltype"] = self.adata.obs[cluster_key].map(annotation)
         for res in resolutions:
             cluster_key = f"leiden_res_{res:4.2f}"
@@ -558,7 +630,7 @@ class PreprocessingPipeline:
         return self.adata
 
     @staticmethod
-    def __annotate_clusters_by_markers(adata, cluster_key, marker_dict):
+    def _annotate_clusters_by_markers(adata, cluster_key, marker_dict):
         """
         Assigns cell type labels to clusters based on average marker gene expression.
 
@@ -597,7 +669,7 @@ class PreprocessingPipeline:
             cluster2celltype[cluster] = best_celltype
         return cluster2celltype
 
-    def ___add_and_aggregate_module_scores(self, adata, gmt_file):
+    def _add_and_aggregate_module_scores(self, adata, gmt_file):
         """
         Adds module scores to the AnnData object based on gene sets defined in a GMT file.
 
@@ -647,7 +719,7 @@ class PreprocessingPipeline:
 
         This function loads a preprocessed AnnData object, iterates through all GMT
         files in a predefined directory, computes module scores for each gene set
-        using `___add_and_aggregate_module_scores`, and writes the updated object back to disk.
+        using `_add_and_aggregate_module_scores`, and writes the updated object back to disk.
 
         Returns:
             AnnData: The updated AnnData object with all module scores added.
@@ -664,7 +736,7 @@ class PreprocessingPipeline:
         gmt_files = list(gmt_dir.glob("*.gmt"))
         for gmt_file in gmt_files:
             logging.debug(f"Processing GMT file: {gmt_file}")
-            self.adata = self.___add_and_aggregate_module_scores(self.adata, gmt_file)
+            self.adata = self._add_and_aggregate_module_scores(self.adata, gmt_file)
         self.adata.write(str(BASE_DIR / "data/processed_data.h5ad"))
         logging.debug("hp_calculation completed")
         return self.adata
@@ -673,36 +745,17 @@ class PreprocessingPipeline:
         """
         Performs pseudotime trajectory analysis per cell type using UMAP and principal graph learning.
 
-        This method:
-        - Loads preprocessed single-cell data (`.h5ad` file).
-        - Validates and filters based on the `tumor_stage` annotation.
-        - Subsets data by cell type (`leiden_res_20.00_celltype`) and processes each separately.
-        - For each cell type with ≥50 cells:
-            - Computes highly variable genes (HVGs).
-            - Runs UMAP and Leiden clustering (if not already present).
-            - Learns a principal graph and calculates pseudotime.
-            - Visualizes the trajectory and overlays sample centroids colored by tumor stage.
-            - Saves each plot to a predefined directory.
-        - Aggregates results per cell type.
-
-        Args:
-            None
+        Now also:
+        - Stores per–cell-type MST in `adata_ct.obsp['mst']` and centroids in `adata_ct.uns['mst_centroids']`.
+        - Exports per–cell-type MST edge list CSV and centroid/node CSV.
+        - Saves an additional centroid-only MST figure.
 
         Returns:
-            Dict[str, AnnData]: A dictionary mapping each processed cell type to its corresponding
-            `AnnData` object, with pseudotime stored in `.obs['pseudotime']`.
-
-        Raises:
-            ValueError: If no preprocessed data is found or preprocessing has not been run.
-            KeyError: If the `tumor_stage` column is missing in `AnnData.obs`.
-            Exception: Logs and skips individual cell types if unexpected errors occur during processing.
-
-        Notes:
-            - Requires `leiden_res_20.00_celltype`, `sample`, and `tumor_stage` to be annotated in `AnnData.obs`.
-            - Output plots are saved under `BASE_DIR/figures/trajectory_plots/`.
-            - Uses custom UMAP-based graph learning and pseudotime ordering functions: `learn_graph` and `order_cells`.
+            Dict[str, AnnData]: maps cell type -> AnnData with `.obs['pseudotime']`,
+            `.obsp['mst']`, and `.uns['mst_centroids']`.
         """
-        logging.debug("=== START monocle_per_celltype ===")
+
+        logging.debug("=== START monocle_per_celltype (with MST export) ===")
 
         if os.path.exists(BASE_DIR / "data/processed_data.h5ad"):
             logging.debug("Reloading processed_data.h5ad for monocle_per_celltype")
@@ -784,84 +837,141 @@ class PreprocessingPipeline:
                 logging.warning("  Found NaN in leiden; coercing to int with NaN→-1")
                 louvain = pd.to_numeric(adata_ct.obs['leiden'], errors='coerce').fillna(-1).astype(int).values
 
-            try:
-                logging.debug("  Learning principal graph via learn_graph(...)")
-                projected_points, mst, centroids = learn_graph(
-                    matrix=umap, clusters=louvain
-                )
-                logging.debug("  Ordering cells in pseudotime via order_cells(...)")
-                pseudotime = order_cells(
-                    umap, centroids, mst=mst,
-                    projected_points=projected_points, root_cells=0
-                )
-                adata_ct.obs['pseudotime'] = pseudotime
-                logging.debug("  Pseudotime assigned to adata_ct.obs")
+            logging.debug("  Learning principal graph via learn_graph(...)")
+            projected_points, mst, centroids = learn_graph(matrix=umap, clusters=louvain)
 
-                plt.figure(figsize=(8, 6))
-                plt.title(f"Principal graph + sample‐centroids ({cell_type})")
+            logging.debug("  Ordering cells in pseudotime via order_cells(...)")
+            pseudotime = order_cells(
+                umap, centroids,
+                mst=mst,
+                projected_points=projected_points,
+                root_cells=0
+            )
+            adata_ct.obs['pseudotime'] = pseudotime
 
-                scatter_plot = plt.scatter(
-                    umap[:, 0], umap[:, 1], c=pseudotime,
-                    s=1, cmap=cmap_custom, rasterized=True
-                )
+            # ===== Persist MST & centroids (cluster-level, not cell-level) =====
+            # Store in .uns to avoid obs×obs shape requirement
+            adata_ct.uns['mst'] = mst                 # sparse (n_clusters × n_clusters)
+            adata_ct.uns['mst_centroids'] = centroids # (n_clusters × 2) in UMAP coords
+            # keep the cluster ids used to build MST
+            adata_ct.obs['leiden_int'] = louvain
 
-                edges = np.array(mst.nonzero()).T
-                for edge in edges:
-                    x0, y0 = centroids[edge[0], 0], centroids[edge[0], 1]
-                    x1, y1 = centroids[edge[1], 0], centroids[edge[1], 1]
-                    plt.plot([x0, x1], [y0, y1], c="black", linewidth=1)
+            # ===== Export MST edge list + centroid table =====
+            mst_ut = sp_triu(mst, k=1, format='coo') if issparse(mst) else None
+            if mst_ut is None:
+                raise RuntimeError("Expected sparse MST matrix from learn_graph.")
 
-                df_umap = pd.DataFrame(umap, columns=['UMAP1', 'UMAP2'], index=adata_ct.obs_names)
-                df_umap['sample'] = adata_ct.obs['sample'].values
-                df_umap['tumor_stage'] = adata_ct.obs['tumor_stage'].values
-                df_umap = df_umap.dropna(subset=['tumor_stage'])
+            def _euclid(a, b):
+                dx = a[0] - b[0]
+                dy = a[1] - b[1]
+                return float(np.sqrt(dx*dx + dy*dy))
 
-                def mode_or_first(x):
-                    m = x.mode()
-                    return m.iloc[0] if len(m) > 0 else x.iloc[0]
+            edge_rows = []
+            for i, j in zip(mst_ut.row, mst_ut.col):
+                length = _euclid(centroids[i], centroids[j])
+                edge_rows.append((int(i), int(j), float(length)))
 
-                centroid_df = (
-                    df_umap.groupby('sample')
-                        .agg({'UMAP1': 'mean', 'UMAP2': 'mean', 'tumor_stage': mode_or_first})
-                        .reset_index()
-                )
+            edges_df = pd.DataFrame(edge_rows, columns=['source_cluster', 'target_cluster', 'euclidean_length'])
 
-                stage_colors = {
-                    'non-cancer': '#84A970',
-                    'early': '#E4C282',
-                    'advanced': '#FF8C00'
+            nodes_df = pd.DataFrame(
+                {
+                    'cluster': np.arange(len(centroids), dtype=int),
+                    'centroid_umap1': centroids[:, 0],
+                    'centroid_umap2': centroids[:, 1],
                 }
+            )
 
-                for _, row in centroid_df.iterrows():
-                    stg = row['tumor_stage']
-                    plt.scatter(
-                        row['UMAP1'], row['UMAP2'],
-                        c=stage_colors.get(stg, 'black'), s=30,
-                        edgecolors='none', marker='o', zorder=10
-                    )
+            safe_ct = str(cell_type).replace(' ', '_')
+            edges_path = trajectory_dir / f"mst_edges_{safe_ct}.csv"
+            nodes_path = trajectory_dir / f"mst_nodes_{safe_ct}.csv"
+            edges_df.to_csv(edges_path, index=False)
+            nodes_df.to_csv(nodes_path, index=False)
+            logging.debug(f"  Saved MST edges to {edges_path}")
+            logging.debug(f"  Saved MST nodes to {nodes_path}")
 
-                legend_patches = [mpatches.Patch(color=col, label=stg)
-                                for stg, col in stage_colors.items()]
-                plt.legend(handles=legend_patches, title='Tumor stage', loc='best', frameon=True)
+            # ===== Doc-style principal graph plot (clusters + MST) =====
+            plt.figure(1, (8, 6))
+            plt.clf()
+            plt.title("Principal graph")
+            plt.scatter(umap[:, 0], umap[:, 1], c=louvain, s=1, cmap="nipy_spectral")
 
-                plt.xticks([])
-                plt.yticks([])
+            edges = np.array(mst.nonzero()).T
+            for edge in edges:
+                # edge is a pair [i, j]; use advanced indexing like in the docs
+                plt.plot(centroids[edge, 0], centroids[edge, 1], c="black", linewidth=1)
 
-                cbar = plt.colorbar(scatter_plot)
-                cbar.set_label('Pseudotime')
+            plt.xticks([]); plt.yticks([])
+            figpath_pg = trajectory_dir / f"principal_graph_{safe_ct}.png"
+            plt.savefig(figpath_pg, dpi=300, bbox_inches='tight')
+            plt.close()
+            logging.debug(f"  Saved principal graph figure to {figpath_pg}")
 
-                figpath = trajectory_dir / f"trajectory_{cell_type.replace(' ', '_')}_with_centroids.png"
-                logging.debug(f"  Saving figure to {figpath}")
-                plt.savefig(figpath, dpi=300, bbox_inches='tight')
-                plt.close()
-                logging.debug("  Figure saved and closed")
+            # ===== Your existing pseudotime overlay with MST & sample-stage centroids =====
+            plt.figure(figsize=(8, 6))
+            plt.title(f"Principal graph + sample‐centroids ({cell_type})")
 
-                results[cell_type] = adata_ct
-                logging.debug(f"Finished processing cell_type = '{cell_type}'")
+            scatter_plot = plt.scatter(
+                umap[:, 0], umap[:, 1], c=pseudotime,
+                s=1, cmap=cmap_custom, rasterized=True
+            )
 
-            except Exception as e:
-                logging.error(f"  Error processing {cell_type}: {e}")
-                continue
+            for edge in edges:
+                x0, y0 = centroids[edge[0], 0], centroids[edge[0], 1]
+                x1, y1 = centroids[edge[1], 0], centroids[edge[1], 1]
+                plt.plot([x0, x1], [y0, y1], c="black", linewidth=1)
 
-        logging.debug("=== END monocle_per_celltype ===")
-        return results
+            df_umap = pd.DataFrame(umap, columns=['UMAP1', 'UMAP2'], index=adata_ct.obs_names)
+            df_umap['sample'] = adata_ct.obs['sample'].values
+            df_umap['tumor_stage'] = adata_ct.obs['tumor_stage'].values
+            df_umap = df_umap.dropna(subset=['tumor_stage'])
+
+            def mode_or_first(x):
+                m = x.mode()
+                return m.iloc[0] if len(m) > 0 else x.iloc[0]
+
+            centroid_df = (
+                df_umap.groupby('sample')
+                .agg({'UMAP1': 'mean', 'UMAP2': 'mean', 'tumor_stage': mode_or_first})
+                .reset_index()
+            )
+
+            stage_colors = {
+                'non-cancer': '#84A970',
+                'early': '#E4C282',
+                'advanced': '#FF8C00'
+            }
+
+            for _, row in centroid_df.iterrows():
+                stg = row['tumor_stage']
+                plt.scatter(
+                    row['UMAP1'], row['UMAP2'],
+                    c=stage_colors.get(stg, 'black'), s=30,
+                    edgecolors='none', marker='o', zorder=10
+                )
+
+            legend_patches = [mpatches.Patch(color=col, label=stg) for stg, col in stage_colors.items()]
+            plt.legend(handles=legend_patches, title='Tumor stage', loc='best', frameon=True)
+
+            plt.xticks([]); plt.yticks([])
+            cbar = plt.colorbar(scatter_plot); cbar.set_label('Pseudotime')
+
+            figpath = trajectory_dir / f"trajectory_{safe_ct}_with_centroids.png"
+            plt.savefig(figpath, dpi=300, bbox_inches='tight')
+            plt.close()
+
+            # ===== Optional: centroid-only MST diagnostic (clean) =====
+            plt.figure(figsize=(6, 5))
+            plt.title(f"MST (centroids) — {cell_type}")
+            for _, r in edges_df.iterrows():
+                i, j = int(r['source_cluster']), int(r['target_cluster'])
+                plt.plot([centroids[i, 0], centroids[j, 0]],
+                        [centroids[i, 1], centroids[j, 1]],
+                        linewidth=1)
+            plt.scatter(centroids[:, 0], centroids[:, 1], s=40)
+            for k, (x, y) in enumerate(centroids):
+                plt.text(x, y, str(k), fontsize=8, ha='center', va='center')
+            plt.xticks([]); plt.yticks([])
+            clean_mst_fig = trajectory_dir / f"mst_{safe_ct}_centroids_only.png"
+            plt.savefig(clean_mst_fig, dpi=300, bbox_inches='tight')
+            plt.close()
+            logging.debug(f"  Saved centroid-only MST figure to {clean_mst_fig}")

@@ -22,7 +22,6 @@ if __name__ == '__main__':
     adata = pipeline.preprocessing()
     adata = pipeline.ct_annotation()
     adata = pipeline.hp_calculation()
-    adata = pipeline.lr_interactions_graph_representation()    
     logger.info("Starting monocle analysis")
     monocle_output = pipeline.monocle_per_celltype()
     logger.info("Monocle analysis completed")

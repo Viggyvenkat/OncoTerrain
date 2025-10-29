@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oncoterrain"
+version = "0.1.1"  
+description = "Pathway-aware tumor landscape utilities for reproducible analyses"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "Vignesh V. Venkat", email = "vvv11@scarletmail.rutgers.edu" }]
+keywords = ["cancer", "pathways", "bioinformatics"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+
+dependencies = [
+  "click",
+  "scanpy",
+  "umap-learn",
+  "gseapy",
+  "matplotlib",
+  "seaborn",
+  "joblib",
+  "numpy",
+  "scikit-learn",
+  "python-igraph",
+  "pytorch-tabnet",
+  "ipywidgets",
+]
+
+[project.urls]
+Homepage = "https://github.com/Viggyvenkat/OncoTerrain"
+Issues = "https://github.com/Viggyvenkat/OncoTerrain/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+exclude = [
+  "fig-generation",
+  "preprocessing",     
+  "vignette_output",
+  "notebooks",
+  "figures",
+  "models",
+  "docs",
+  "py-monocle",
+  "vignettes",
+]
+
+[tool.setuptools.package-data]
+OncoTerrain = [
+  "*.joblib",
+  "HallmarkPathGMT/*.gmt",
+]
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
+explicit = true

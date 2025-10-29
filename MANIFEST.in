@@ -1,1 +1,10 @@
-include src/oncocli/OncoTerrain.joblib
+include README.md
+include LICENSE
+recursive-include src/OncoTerrain HallmarkPathGMT *.joblib
+prune vignette_output
+prune figures
+prune models
+prune notebooks
+prune docs
+prune py-monocle
+prune vignettes

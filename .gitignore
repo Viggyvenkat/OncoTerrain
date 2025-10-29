@@ -8,3 +8,13 @@ HallmarkPathGMT
 docs
 slurm-figures.sh
 slurm.sh
+Manuscript-drafts
+models
+.conda
+vignette_output
+src/OncoTerrain/.ipynb_checkpoints
+src/OncoTerrain/__pycache__
+src/OncoTerrain.egg-info
+src/OncoTerrain/OncoTerrain.joblib
+dist
+.venv-test

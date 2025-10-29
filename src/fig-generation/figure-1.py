@@ -8,9 +8,8 @@ from pathlib import Path
 
 BASE_DIR = Path.cwd()
 
-
 def __figure_one_D(adata):
-    sc.pl.umap( adata, color='project', size=0.2, show=False )
+    sc.pl.umap( adata, color='project', size = 0.2, show=False )
 
     ax = plt.gca()
 
@@ -24,7 +23,7 @@ def __figure_one_D(adata):
 
     plt.savefig(str(BASE_DIR / 'figures/umap_project_annotation.png'), dpi=300, bbox_inches='tight')
 
-    sc.pl.umap( adata, color='disease', size=0.2, show=False )
+    sc.pl.umap( adata, color='disease', size = 0.2, show=False )
 
     ax = plt.gca()
 
@@ -38,12 +37,32 @@ def __figure_one_D(adata):
 
     plt.savefig(str(BASE_DIR / 'figures/umap_disease_annotation.png'), dpi=300, bbox_inches='tight')
 
+    stage_colors = {
+        'non-cancer': '#84A970',
+        'early':      '#E4C282',
+        'advanced':   '#FF8C00'
+    }
+
+    sc.pl.umap( adata, color='tumor_stage', size = 0.2, show=False, palette=stage_colors)
+
+    ax = plt.gca()
+
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+        
+    ax.tick_params(width=1.5)
+
+    title_font = ax.title.get_fontproperties()
+    ax.set_title('Tumor Stage Annotation of HCA and LUCA', fontproperties=title_font)
+
+    plt.savefig(str(BASE_DIR / 'figures/umap_tumor_stage_annotation.png'), dpi=300, bbox_inches='tight')
+
 def __figure_one_E(adata):
     cmap_custom = LinearSegmentedColormap.from_list('gray_emerald', ['gray', '#50C878'])
 
-    available_genes = list(adata.var_names)
-    genes = random.sample(available_genes, 4)
-    print(f"Randomly selected genes: {genes}")
+    # Fixed set of genes instead of random sampling
+    genes = ['EPCAM', 'CD163', 'COL1A2', 'CD3D']
+    print(f"Using selected genes: {genes}")
 
     fig, axes = plt.subplots(1, len(genes), figsize=(25, 5))
     plt.subplots_adjust(wspace=0.15)
@@ -52,7 +71,7 @@ def __figure_one_E(adata):
         sc.pl.umap(
             adata,
             color=gene,
-            size=0.2,
+            size = 0.2,
             sort_order=True,
             cmap=cmap_custom,
             ax=axes[i],
@@ -78,6 +97,7 @@ def __figure_one_E(adata):
         
         axes[i].tick_params(width=1.5)
 
+    # Colorbar based on first gene
     expr = adata[:, genes[0]].X
     expr_arr = expr.toarray().flatten() if hasattr(expr, "toarray") else np.array(expr).flatten()
 
@@ -88,14 +108,14 @@ def __figure_one_E(adata):
     cbar = plt.colorbar(sm, ax=axes, fraction=0.02, pad=0.04)
     cbar.set_label('Expression')
 
-    plt.savefig(str(BASE_DIR/ 'figures/figure-1-E.png'), dpi=300, bbox_inches='tight')
+    plt.savefig(str(BASE_DIR / 'figures/figure-1-E.png'), dpi=300, bbox_inches='tight')
     plt.close()
 
 def __figure_one_F(adata):
     sc.pl.umap(
         adata,
         color='leiden_res_20.00_celltype',
-        size=0.2,
+        size = 0.2,
         show=False 
     )
 
@@ -112,11 +132,14 @@ def __figure_one_F(adata):
     plt.savefig(str(BASE_DIR/ 'figures/umap_celltype_annotation.png'), dpi=300, bbox_inches='tight')
 
 def __figure_one_G(adata):
-    disease_col = 'disease'
+    disease_col = 'tumor_stage'
     celltype_col = 'leiden_res_20.00_celltype'
 
     pt = adata.obs.groupby([disease_col, celltype_col]).size().unstack(fill_value=0)
     pt_frac = pt.div(pt.sum(axis=1), axis=0)
+
+    supplementary_table_path = BASE_DIR / 'figures/supplementary_table_one.csv'
+    pt_frac.to_csv(supplementary_table_path)
 
     celltype_colors = adata.uns[f"{celltype_col}_colors"] 
     celltype_categories = adata.obs[celltype_col].cat.categories
@@ -131,7 +154,7 @@ def __figure_one_G(adata):
         figsize=(10, 6)
     )
 
-    ax.set_xlabel('Disease')
+    ax.set_xlabel('tumor_stage')
     ax.set_ylabel('Fraction of Cells')
     ax.set_ylim(0, 1)
     ax.set_xticklabels(ax.get_xticklabels(), rotation=0)
@@ -139,7 +162,7 @@ def __figure_one_G(adata):
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
 
-    plt.title('Cell Type Fractions by Disease')
+    plt.title('Cell Type Fractions by tumor_stage')
 
     legend = ax.get_legend()
     if legend:
@@ -147,7 +170,6 @@ def __figure_one_G(adata):
 
     plt.savefig(str(BASE_DIR / 'figures/barplot_celltype_fractions.png'), dpi=300, bbox_inches='tight')
     plt.show()
-
 
 if __name__ == "__main__":
 
