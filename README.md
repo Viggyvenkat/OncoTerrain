@@ -47,7 +47,7 @@ All model development and training were performed on the Rutgers Amarel HPCU wit
 Contact: vvv11@scarletmail.rutgers.edu
 
 ### References
-- Hu X. et al. Deconstructing evolutionary histories of complex rearrangements during tumorigenesis in lung. bioRxiv.
+- Hu X. et al. Deconstructing evolutionary histories of complex rearrangements during tumorigenesis in lung. bioRxiv (2024).
 - Venkat V. et al. Disruptive changes in tissue microenvironment prime oncogenic processes at different stages of carcinogenesis in lung. bioRxiv (2024).
 
 ### Acknowledgements

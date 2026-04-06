@@ -1,0 +1,25 @@
+name: revision
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.10
+  - pip
+  - numpy
+  - pandas
+  - scipy
+  - scikit-learn
+  - matplotlib
+  - seaborn
+  - joblib
+  - pyyaml
+  - h5py
+  - anndata
+  - scanpy
+  - leidenalg
+  - python-igraph
+  - umap-learn
+  - pytorch
+  - pip:
+      - pytorch-tabnet
+      - gseapy
