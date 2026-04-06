@@ -67,7 +67,6 @@ import logging
 import numpy as np
 import pandas as pd
 import scanpy as sc
-import scprep
 from scipy import sparse
 from sklearn.metrics.pairwise import cosine_similarity
 import matplotlib.pyplot as plt
@@ -127,6 +126,24 @@ CONDITIONS = {
     'XENOBIOTIC_METABOLISM':['Immune']
 }
 
+CELLTYPE_MAP = {
+    'AT2': 0, 'Goblet (subsegmental)': 1, 'EC general capillary': 2, 'CD8 T cells': 3,
+    'Club (nasal)': 4, 'Club (non-nasal)': 5, 'AT1': 6, 'Plasma cells': 7, 'Pericytes': 8,
+    'Mesothelium': 9, 'Multiciliated (non-nasal)': 10, 'Mast cells': 11, 'Basal resting': 12,
+    'Lymphatic EC differentiating': 13, 'Monocyte derived Mφ': 14, 'Non classical monocytes': 15,
+    'Suprabasal': 16, 'Multiciliated (nasal)': 17, 'Alveolar macrophages': 18,
+    'Transitional Club AT2': 19, 'Peribronchial fibroblasts': 20, 'Goblet (nasal)': 21,
+    'SMG serous (nasal)': 22, 'NK cells': 23, 'Alveolar Mφ MT-positive': 24,
+    'Classical monocytes': 25, 'B cells': 26, 'EC venous pulmonary': 27, 'CD4 T cells': 28,
+    'DC2': 29, 'T cells proliferating': 30, 'Smooth muscle': 31, 'Adventitial fibroblasts': 32,
+    'Plasmacytoid DCs': 33, 'Lymphatic EC proliferating': 34, 'EC aerocyte capillary': 35,
+    'Lymphatic EC mature': 36, 'Subpleural fibroblasts': 37, 'Migratory DCs': 38, 'Alveolar fibroblasts': 39,
+    'Alveolar Mφ CCL3+': 40, 'EC arterial': 41, 'SM activated stress response': 42, 'Alveolar Mφ proliferating': 43,
+    'SMG serous (bronchial)': 44, 'EC venous systemic': 45, 'Goblet (bronchial)': 46, 'Neuroendocrine': 47, 'DC1': 48,
+    'Myofibroblasts': 49, 'Interstitial Mφ perivascular': 50, 'SMG mucous': 51, 'AT2 proliferating': 52, 'SMG duct': 53,
+    'Ionocyte': 54, 'Fibromyocytes': 55, 'Deuterosomal': 56, 'Tuft': 57
+}
+
 def __feature_analysis_w_preprocessing(data):
     celltype_mapping = {name: i for i, name in enumerate(data['leiden_res_20.00_celltype'].unique())}
     project_mapping = {name: i for i, name in enumerate(data['project'].unique())}
@@ -137,15 +154,23 @@ def __feature_analysis_w_preprocessing(data):
     epithelial_data = data[data['leiden_res_20.00_celltype'] == 'Epithelial cell']
     counts = epithelial_data['tumor_stage'].value_counts()
     min_count = counts.min()
-    balanced_epithelial_data = epithelial_data.groupby('tumor_stage').apply(lambda x: x.sample(min_count)).reset_index(drop=True)
+    balanced_epithelial_data = (
+        epithelial_data
+        .groupby('tumor_stage', observed=True)
+        .apply(lambda x: x.sample(min_count), include_groups=False)
+        .reset_index(drop=True)
+    )
     non_epithelial_data = data[data['leiden_res_20.00_celltype'] != 'Epithelial cell']
     data = pd.concat([non_epithelial_data, balanced_epithelial_data])
 
-    data.loc[:, 'tumor_stage'] = data['tumor_stage'].map({'non-cancer': 0, 'early': 1, 'advanced': 2})
-    data.loc[:, 'project'] = data['project'].map(project_mapping)
-    data.loc[:, 'leiden_res_20.00_celltype'] = data['leiden_res_20.00_celltype'].map(celltype_mapping)
+    data.loc[:, 'tumor_stage'] = data['tumor_stage'].astype(str).str.lower().map({'non-cancer': 0, 'early': 1, 'advanced': 2})
+    data.loc[:, 'project'] = data['project'].astype(object).map(project_mapping)
+    data.loc[:, 'leiden_res_20.00_celltype'] = data['leiden_res_20.00_celltype'].astype(object).map(celltype_mapping)
 
     data = data.dropna(subset=['tumor_stage', 'project', 'leiden_res_20.00_celltype'])
+    data.loc[:, 'tumor_stage'] = data['tumor_stage'].astype(int)
+    data.loc[:, 'project'] = data['project'].astype(int)
+    data.loc[:, 'leiden_res_20.00_celltype'] = data['leiden_res_20.00_celltype'].astype(int)
 
     logging.info("Preprocessing complete. Data shape: %s", data.shape)
     logging.info("Tumor stage mapping: %s", data['tumor_stage'].unique())
@@ -174,14 +199,13 @@ def _bh_fdr(pvals: np.ndarray) -> np.ndarray:
 def mannwhitney_by_stage_all_columns(
     df: pd.DataFrame,
     stage_key: str = "tumor_stage",
-    stage_order=(0, 1, 2),              # use ("non-cancer","early","advanced") if your column has strings
+    stage_order=(0, 1, 2),       
     exclude_cols=("project", "leiden_res_20.00_celltype"),
     output_csv="figure_five_B_mannwhitney_fdr.csv"
 ):
     if stage_key not in df.columns:
         raise KeyError(f"'{stage_key}' not found in DataFrame")
 
-    # keep only rows with a valid stage label
     stages = df[stage_key].replace(['nan','NaN','NAN'], np.nan)
     keep = ~stages.isna()
     if keep.sum() == 0:
@@ -189,21 +213,17 @@ def mannwhitney_by_stage_all_columns(
     dfx = df.loc[keep].copy()
     stages = stages.loc[keep]
 
-    # make sure the requested three stages exist
     present = set(pd.unique(stages))
     missing = [s for s in stage_order if s not in present]
     if missing:
         raise ValueError(f"These stages are missing in '{stage_key}': {missing}")
 
-    # boolean masks (arrays) for each stage
     masks = {s: (stages.values == s) for s in stage_order}
 
-    # choose numeric feature columns, excluding the label cols
     exclude = set([stage_key, *exclude_cols])
     numeric_cols = dfx.select_dtypes(include=[np.number]).columns
     features = [c for c in numeric_cols if c not in exclude]
 
-    # define the three pairwise comparisons
     pairs = [
         (stage_order[0], stage_order[1]),
         (stage_order[0], stage_order[2]),
@@ -211,13 +231,11 @@ def mannwhitney_by_stage_all_columns(
     ]
 
     records = []
-    # vectorized column access once per feature; mask per comparison
     for feat in features:
         col = dfx[feat].to_numpy()
         for a, b in pairs:
             x = col[masks[a]]
             y = col[masks[b]]
-            # drop NaNs
             x = x[~np.isnan(x)]
             y = y[~np.isnan(y)]
 
@@ -225,7 +243,6 @@ def mannwhitney_by_stage_all_columns(
                 U, p = np.nan, np.nan
                 medA = np.nan; medB = np.nan
             else:
-                # two-sided; SciPy picks exact/asymptotic automatically (asymptotic for large n)
                 U, p = mannwhitneyu(x, y, alternative='two-sided', method='auto')
                 medA = float(np.median(x)); medB = float(np.median(y))
 
@@ -244,7 +261,6 @@ def mannwhitney_by_stage_all_columns(
 
     out = pd.DataFrame.from_records(records)
 
-    # FDR across *all* tests
     mask = out["p_value"].notna().values
     out["p_value_fdr"] = np.nan
     if mask.sum() > 0:
@@ -252,7 +268,6 @@ def mannwhitney_by_stage_all_columns(
 
     out = out.sort_values(["feature", "comparison"]).reset_index(drop=True)
 
-    # write CSV
     output_csv = Path(output_csv)
     output_csv.parent.mkdir(parents=True, exist_ok=True)
     out.to_csv(output_csv, index=False)
@@ -316,10 +331,12 @@ def __figure_five_C(adata, save_path, embedding, hallmark_list=None):
 
     for hallmark in hallmark_list:
         logging.info(f"Processing hallmark: {hallmark}")
+        if hallmark not in adata.columns or not np.issubdtype(adata[hallmark].dtype, np.number):
+            logging.warning(f"Skipping {hallmark}: missing or non-numeric")
+            continue
 
         min_value = adata[hallmark].min()
         max_value = adata[hallmark].max()
-        logging.info(f"Min and max expression values for {hallmark}: {min_value}, {max_value}")
 
         normed_expression = (adata[hallmark] - min_value) / (max_value - min_value)
 
@@ -395,17 +412,8 @@ def __figure_five_D(adata, save_path):
 def figure_five_E(meta_data, save_path, stage=2, stage_column='tumor_stage',
                   groupby_column='project', scale_range=(0, 100),
                   stage_label=None, single_sample=False, sample_id=None):
-    import logging
-    import numpy as np
-    import pandas as pd
-    import matplotlib.pyplot as plt
-    import matplotlib.patches as mpatches
-    from sklearn.preprocessing import MinMaxScaler
-
-    # ---------- copy & rename ONLY hallmark columns ----------
     md = meta_data.copy()
 
-    # Build a rename map that touches only hallmark-like columns
     rename_map = {}
     cond_keys = set(CONDITIONS.keys())
 
@@ -415,17 +423,14 @@ def figure_five_E(meta_data, save_path, stage=2, stage_column='tumor_stage',
             rename_map[c] = cu.replace('HALLMARK_', '')
         elif cu in cond_keys:
             rename_map[c] = cu
-        # else: leave metadata columns (e.g., 'project', 'tumor_stage') untouched
 
     if rename_map:
         md = md.rename(columns=rename_map)
 
-    # Hallmark columns = intersection with CONDITIONS
     numeric_cols = md.select_dtypes(include=[np.number]).columns.tolist()
     hallmark_cols = [c for c in numeric_cols if c in cond_keys]
 
     if single_sample:
-        # --------- SINGLE-SAMPLE w/ PSEUDOBULK (mean across its cells) ---------
         if groupby_column not in md.columns:
             raise KeyError(f"'{groupby_column}' not found in meta_data columns {list(md.columns)}")
 
@@ -456,7 +461,6 @@ def figure_five_E(meta_data, save_path, stage=2, stage_column='tumor_stage',
         selected_data = selected_data.dropna(subset=['Condition'])
 
     else:
-        # ---------------- ORIGINAL MULTI-SAMPLE PATH ----------------
         if groupby_column not in md.columns:
             raise KeyError(f"'{groupby_column}' not found in meta_data columns {list(md.columns)}")
         if stage_column not in md.columns:
@@ -469,7 +473,6 @@ def figure_five_E(meta_data, save_path, stage=2, stage_column='tumor_stage',
         pseudobulk_expr[groupby_column] = md[groupby_column].values
         pseudobulk_expr = pseudobulk_expr.groupby(groupby_column).mean()
 
-        # safety (idempotent) – but only for hallmark columns already captured above
         pseudobulk_expr.columns = [col.upper().replace("HALLMARK_", "") for col in pseudobulk_expr.columns]
 
         sample_metadata = md[[groupby_column, stage_column]].drop_duplicates().set_index(groupby_column)
@@ -487,7 +490,6 @@ def figure_five_E(meta_data, save_path, stage=2, stage_column='tumor_stage',
         selected_data = selected_data.dropna(subset=['Condition'])
         selected_data['mean_score'] = selected_data.drop(columns=['hallmark', 'Condition']).mean(axis=1)
 
-    # ---------------- plotting (unchanged) ----------------
     expanded_data = selected_data[['hallmark', 'mean_score', 'Condition']].copy()
     expanded_data = expanded_data.assign(Condition=expanded_data['Condition'].str.split(', '))
     expanded_data = expanded_data.explode('Condition').reset_index(drop=True)
@@ -556,28 +558,32 @@ def figure_five_E(meta_data, save_path, stage=2, stage_column='tumor_stage',
 def __train_model(adata):
     adata = adata.dropna()
 
-    y = adata['tumor_stage']
-    X = adata.drop(['tumor_stage', 'project'], axis=1)
+    numeric_cols = adata.select_dtypes(include=[np.number]).columns.tolist()
+    drop_cols = {'tumor_stage', 'project', 'leiden_res_20.00_celltype', 'leiden_res_0.50', 'leiden_res_2.00', 'leiden_res_2.00_celltype', 
+                 'leiden_res_0.50_celltype'}
+    feature_cols = [c for c in numeric_cols if c not in drop_cols]
+
+    y = adata['tumor_stage'].astype(int)
+    X = adata[feature_cols].astype(float)
+
+    X_train, X_val, y_train, y_val = train_test_split(
+        X, y, test_size=0.3, random_state=42, stratify=y
+    )
 
     columns_to_exclude = ['project', 'leiden_res_20.00_celltype']
-    columns_to_scale = [col for col in X.columns if col not in columns_to_exclude]
+    numeric_cols_train = X_train.select_dtypes(include=[np.number]).columns.tolist()
+    columns_to_scale = [c for c in numeric_cols_train if c not in columns_to_exclude]
 
     scaler = MinMaxScaler()
-    X[columns_to_scale] = scaler.fit_transform(X[columns_to_scale])
+    X_train_scaled = X_train.copy()
+    X_val_scaled   = X_val.copy()
+    if columns_to_scale:
+        X_train_scaled[columns_to_scale] = scaler.fit_transform(X_train[columns_to_scale])
+        X_val_scaled[columns_to_scale]   = scaler.transform(X_val[columns_to_scale])
 
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.3, random_state=42)
-
-    train_data = X_train.copy()
-    train_data['tumor_stage'] = y_train
-
-    X_train = train_data.drop('tumor_stage', axis=1)
-    y_train = train_data['tumor_stage']
-
-    y_train = y_train.astype(int)
-    y_val = y_val.astype(int)
-
-    X_train = X_train.astype(float)
-    X_val = X_val.astype(float)
+    y_train = y_train.astype(int); y_val = y_val.astype(int)
+    X_train_scaled = X_train_scaled.astype(float)
+    X_val_scaled   = X_val_scaled.astype(float)
 
     param_grid = {
         'n_d': [8, 16, 24],
@@ -589,28 +595,29 @@ def __train_model(adata):
         'n_independent': [2, 4],
         'n_shared': [2, 4],
     }
-
     clf = TabNetClassifier(verbose=0)
+    random_search = RandomizedSearchCV(
+        estimator=clf,
+        param_distributions=param_grid,
+        scoring='accuracy',
+        cv=3, verbose=0, n_jobs=-1, error_score='raise'
+    )
 
-    random_search = RandomizedSearchCV(estimator=clf, param_distributions=param_grid, 
-                                    scoring='accuracy', cv=3, verbose=0, n_jobs=-1, error_score='raise')
-
-    random_search.fit(X_train.values, y_train.values, 
-                    eval_set=[(X_val.values, y_val.values)], 
-                    eval_metric=['accuracy', 'balanced_accuracy', 'logloss'])
+    random_search.fit(
+        X_train_scaled.values, y_train.values,
+        eval_set=[(X_val_scaled.values, y_val.values)],
+        eval_metric=['accuracy', 'balanced_accuracy', 'logloss']
+    )
 
     print("Best parameters found: ", random_search.best_params_)
     print("Best accuracy score: ", random_search.best_score_)
 
-    y_val_probs = random_search.predict_proba(X_val.values)
+    y_val_probs = random_search.predict_proba(X_val_scaled.values)
 
     n_classes = len(np.unique(y_train))
     y_val_bin = label_binarize(y_val, classes=np.arange(n_classes))
 
-    fpr = dict()
-    tpr = dict()
-    roc_auc = dict()
-
+    fpr = {}; tpr = {}; roc_auc = {}
     for i in range(n_classes):
         fpr[i], tpr[i], _ = roc_curve(y_val_bin[:, i], y_val_probs[:, i])
         roc_auc[i] = auc(fpr[i], tpr[i])
@@ -618,32 +625,26 @@ def __train_model(adata):
     plt.figure(figsize=(10, 8))
     for i in range(n_classes):
         plt.plot(fpr[i], tpr[i], label=f"Class {i} (AUC = {roc_auc[i]:.2f})")
-
-    plt.plot([0, 1], [0, 1], 'k--') 
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.xlabel('False Positive Rate (FPR)')
-    plt.ylabel('True Positive Rate (TPR)')
-    plt.title('One-vs-Rest ROC-AUC')
-    plt.legend(loc="lower right")
-
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.xlim([0.0, 1.0]); plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate (FPR)'); plt.ylabel('True Positive Rate (TPR)')
+    plt.title('One-vs-Rest ROC-AUC'); plt.legend(loc="lower right")
     BASE_DIR = Path.cwd()
-
     plt.savefig(BASE_DIR / "figures/ROC-AUC-PLOT.png", dpi=300, bbox_inches='tight')
 
-    y_val_pred = random_search.predict(X_val.values)
-
+    y_val_pred = random_search.predict(X_val_scaled.values)
     cm = confusion_matrix(y_val, y_val_pred)
-
     disp = ConfusionMatrixDisplay(confusion_matrix=cm)
     disp.plot(cmap=plt.cm.Blues)
     plt.title('Confusion Matrix - Type I vs Type II Errors')
-
     plt.savefig(BASE_DIR / "figures/CONFUSION_MATRIX.png", dpi=300, bbox_inches='tight')
 
     joblib.dump({
         'model': random_search,
-        'features': X_train.columns.tolist()
+        'features': X_train_scaled.columns.tolist(),  
+        'scaler': scaler,                            
+        'columns_to_exclude': columns_to_exclude,   
+        'label_map': {0: 'Normal-like', 1: 'Pre-malignant', 2: 'Tumor-like'}
     }, "OncoTerrain.joblib")
 
     return random_search
@@ -681,14 +682,11 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
 
     logging.info("Starting __figure_five_F plotting function.")
     
-    # find all annotated OncoTerrain files
     oncoterrain_files = list((BASE_DIR / 'figures').glob('*_oncoterrain/OncoTerrain_annotated.h5ad'))
     
-    # determine which columns in mice_data are expression columns
     mice_columns = [col for col in mice_data.columns if col not in ['Gene', 'Human_Ortholog']]
     logging.info(f"Mice data columns for analysis: {mice_columns}")
     
-    # pick gene identifier column
     if 'Human_Ortholog' in mice_data.columns:
         gene_col = 'Human_Ortholog'
     elif 'Gene' in mice_data.columns:
@@ -696,7 +694,6 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
     else:
         raise ValueError("No gene identifier column found in mice_data")
     
-    # average duplicates
     dup = mice_data[mice_data[gene_col].duplicated(keep=False)]
     if not dup.empty:
         logging.warning(f"Found {len(dup)} duplicate gene entries; averaging")
@@ -705,7 +702,6 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
         logging.info(f"After averaging duplicates: {len(mice_data)} unique genes")
     
     all_results = []
-    # loop through each sample
     for i, file_path in enumerate(oncoterrain_files):
         full_path = BASE_DIR / file_path
         if not full_path.exists():
@@ -716,7 +712,6 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
         adata = sc.read_h5ad(full_path)
         sample_name = Path(file_path).parent.name.split('_')[0]
 
-        # TPM normalization
         logging.info(f"Normalizing {sample_name} with TPM via scprep")
         try:
             if sparse.issparse(adata.X):
@@ -743,14 +738,12 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
             continue
         logging.info(f"{len(common)} common genes for {sample_name}")
         
-        # mapping back to original names
         sc_map   = {g.upper():g for g in adata.var_names}
         mice_map = {g.upper():g for g in mice_data[gene_col].dropna()}
         common_list = sorted(common)
         sc_genes_sel   = [sc_map[g]   for g in common_list]
         mice_genes_sel = [mice_map[g] for g in common_list]
         
-        # build mice expression matrix
         mice_dict = {
             row[gene_col]: row[mice_columns].astype(float).values
             for _, row in mice_data.iterrows()
@@ -758,10 +751,8 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
         }
         mice_mat = np.vstack([mice_dict[g] for g in mice_genes_sel])
         
-        # filter adata to common genes
         adata_sub = adata[:, sc_genes_sel].copy()
         
-        # compute similarities per class and condition
         for cls in classes:
             mask = adata.obs['oncoterrain_class'] == cls
             sub_adata = adata_sub[mask, :]
@@ -769,7 +760,6 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
                 logging.warning(f"No cells in class {cls} for {sample_name}")
                 continue
             
-            # mean expression, log1p
             mexpr = np.log1p(np.mean(sub_adata.X, axis=0).A1 if hasattr(sub_adata.X, 'A1') else np.mean(sub_adata.X, axis=0))
             
             for j, cond in enumerate(mice_columns):
@@ -795,7 +785,6 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
         logging.error("No results generated.")
         return None
     
-    # save detailed and summary CSVs
     csv1 = save_path / "figure_5F_detailed_similarities.csv"
     results_df.to_csv(csv1, index=False)
     logging.info(f"Detailed saved to {csv1}")
@@ -810,17 +799,14 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
     summary_df.to_csv(csv2)
     logging.info(f"Summary saved to {csv2}")
     
-    # select only the conditions we care about
     selected_conditions = ['Normal Lung', 'TMet', 'TnonMet', 'Pleural DTCs']
     filtered = results_df[results_df['Mice_Condition'].isin(selected_conditions)]
     
-    # --- GROUPED BAR PLOTS ---
     class_colors = {
         'Pre-malignant': '#E4C282',
         'Tumor-like':    '#FF8C00'
     }
 
-    # Cosine differences vs Normal-like
     diffs_cos = {'Pre-malignant': [], 'Tumor-like': []}
     for cond in selected_conditions:
         grp = filtered[filtered['Mice_Condition']==cond]
@@ -855,7 +841,6 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
     plt.close()
     logging.info(f"Cosine bar plot saved to: {path_cos}")
 
-    # Pearson differences vs Normal-like
     diffs_pear = {'Pre-malignant': [], 'Tumor-like': []}
     for cond in selected_conditions:
         grp = filtered[filtered['Mice_Condition']==cond]
@@ -887,7 +872,6 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
     plt.close()
     logging.info(f"Pearson bar plot saved to: {path_pear}")
 
-    # --- HEATMAP ---
     plt.figure(figsize=(12, 8))
     sns.heatmap(summary_df, annot=True, cmap='coolwarm', center=0,
                 fmt='.3f', cbar_kws={'label': 'Mean Cosine Similarity'})
@@ -905,9 +889,7 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
     
     return results_df, summary_df
 
-if __name__ == '__main__':
-    # logging.info("Script started.")
-    
+if __name__ == '__main__':    
     BASE_DIR = Path.cwd()
     data_path = BASE_DIR / 'data/processed_data.h5ad'
     logging.info(f"Reading data from {data_path}")
@@ -922,13 +904,15 @@ if __name__ == '__main__':
                                'leiden_res_1.00', 'leiden_res_5.00', 'leiden_res_10.00', 'leiden_res_20.00', 'leiden_res_0.10_celltype',
                                'leiden_res_1.00_celltype', 'leiden_res_5.00_celltype', 'leiden_res_10.00_celltype'])
 
-    # logging.info("Running feature analysis preprocessing.")
     updated_meta_data, _, _ = __feature_analysis_w_preprocessing(meta_data)
     
-    # hallmark_list = updated_meta_data.columns[~updated_meta_data.columns.isin(['tumor_stage', 'project', 'leiden_res_20.00_celltype'])]
+    # numeric_cols_main = updated_meta_data.select_dtypes(include=[np.number]).columns
+    # NON_FEATURES = {'tumor_stage', 'project', 'leiden_res_20.00_celltype', 'leiden_res_0.50', 'leiden_res_2.00'}
+    # feature_cols = [c for c in numeric_cols_main if c not in NON_FEATURES]
+    # hallmark_list = [c for c in feature_cols if c in CONDITIONS.keys()]
     # logging.info(f"Identified hallmark features: {list(hallmark_list)}")
     
-    # features = updated_meta_data.drop(columns=['tumor_stage', 'leiden_res_20.00_celltype', 'project'])
+    # features = updated_meta_data[feature_cols].to_numpy()
     # tumor_stage = updated_meta_data['tumor_stage']
     
     # logging.info("Initializing UMAP reducer with parameters: n_neighbors=50, min_dist=0.05, metric='euclidean'")
@@ -945,43 +929,41 @@ if __name__ == '__main__':
     # df = mannwhitney_by_stage_all_columns(
     #     updated_meta_data,
     #     stage_key="tumor_stage",
-    #     stage_order=(0, 1, 2),   # <-- numeric to match your mapping
+    #     stage_order=(0, 1, 2),  
     #     exclude_cols=("project", "leiden_res_20.00_celltype"),
     #     output_csv="figures/supplementary_table_three.csv"
     # )
     
-    # logging.info("Generating figure 5B.")
+    logging.info("Generating figure 5B.")
     # __figure_five_B(updated_meta_data, save_path=str(fig5B_path), embedding=embedding)
     
-    # logging.info("Generating figure 5C.")
+    logging.info("Generating figure 5C.")
     # __figure_five_C(updated_meta_data, save_path=str(fig5C_path), embedding=embedding, hallmark_list=hallmark_list)
     
-    # logging.info("Generating figure 5D.")
+    logging.info("Generating figure 5D.")
     # __figure_five_D(updated_meta_data, save_path=str(fig5D_path))
 
-    # Define mapping from normalized to label
     stages_to_plot = {
         0: "Non-Cancer",
         1: "Early",
         2: "Advanced"
     }
 
-    for stage_key, stage_label in stages_to_plot.items():
-        fig5E_path = BASE_DIR / f'figures/fig-5E-{stage_label}.png'
-        logging.info(f"Generating figure 5E for {stage_label}.")
-        figure_five_E(
-            updated_meta_data,
-            save_path=str(fig5E_path),
-            stage=stage_key,          # normalized match
-            stage_column='tumor_stage',
-            stage_label=stage_label
-        )
-
+    # for stage_key, stage_label in stages_to_plot.items():
+    #     fig5E_path = BASE_DIR / f'figures/fig-5E-{stage_label}.png'
+    #     logging.info(f"Generating figure 5E for {stage_label}.")
+    #     figure_five_E(
+    #         updated_meta_data,
+    #         save_path=str(fig5E_path),
+    #         stage=stage_key,        
+    #         stage_column='tumor_stage',
+    #         stage_label=stage_label
+    #     )
     
-    # logging.info("Training model.")
-    # model = __train_model(updated_meta_data)
+    logging.info("Training model.")
+    model = __train_model(updated_meta_data)
     
-    # __figure_five_H()
-    # __figure_five_F(save_path=BASE_DIR / 'figures/fig-5F', mice_data = pd.read_csv(BASE_DIR / 'data/averaged_gene_expression_nature_mice_supp_1.csv'))
+    __figure_five_H()
+    __figure_five_F(save_path=BASE_DIR / 'figures/fig-5F', mice_data = pd.read_csv(BASE_DIR / 'data/averaged_gene_expression_nature_mice_supp_1.csv'))
 
-    # logging.info("Script finished successfully.")
+    logging.info("Script finished successfully.")

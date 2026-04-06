@@ -3,6 +3,9 @@ import os
 from importlib import resources
 from pathlib import Path
 from typing import Dict, Iterable, Optional
+import warnings
+
+import anndata as ad
 import gseapy as gp
 import joblib
 import matplotlib.pyplot as plt
@@ -13,61 +16,59 @@ import scanpy as sc
 import seaborn as sns
 import scipy.sparse as sp
 import umap
-from pytorch_tabnet.tab_model import TabNetClassifier
 from sklearn.preprocessing import MinMaxScaler
-import anndata as ad
-import warnings
+from itertools import groupby
 
 CONDITIONS = {
     'ADIPOGENESIS': ['EMT and Metastasis', 'Inflammation'],
     'ALLOGRAFT_REJECTION': ['Immune', 'Inflammation'],
     'ANDROGEN_RESPONSE': ['Sensitivity to growth'],
-    'ANGIOGENESIS':['Angiogenesis', 'Immune', 'Inflammation'],
-    'APICAL_JUNCTION':['EMT and Metastasis', 'Angiogenesis'],
-    'APICAL_SURFACE':['EMT and Metastasis', 'Angiogenesis'],
-    'APOPTOSIS':['Apoptosis', 'Replication'],
-    'BILE_ACID_METABOLISM':['Sensitivity to growth', 'Immune', 'Energetics'],
-    'CHOLESTEROL_HOMEOSTASIS':['Sensitivity to growth', 'Immune', 'Energetics'],
-    'COAGULATION':['Angiogenesis', 'Immune'],
-    'COMPLEMENT':['Immune','Apoptosis'],
-    'DNA_REPAIR':['Proliferative signal', 'Genome instability'],
-    'E2F_TARGETS':['Proliferative signal'],
-    'EPITHELIAL_MESENCHYMAL_TRANSITION':['EMT and Metastasis'],
-    'ESTROGEN_RESPONSE_EARLY':['Sensitivity to growth'],
-    'FATTY_ACID_METABOLISM':['Sensitivity to growth', 'Immune', 'Energetics'],
-    'G2M_CHECKPOINT':['Proliferative signal', 'Genome instability'],
-    'GLYCOLYSIS':['Sensitivity to growth'],
-    'HEDGEHOG_SIGNALING':['Insensitivity to antigrowth','Immune', 'Sensitivity to growth'],
-    'HEME_METABOLISM':['Angiogenesis'],
-    'HYPOXIA':['Sensitivity to growth','EMT and Metastasis', 'Energetics'],
-    'IL2_STAT5_SIGNALING':['Immune'],
-    'IL6_JAK_STAT3_SIGNALING':['Insensitivity to antigrowth'],
-    'INFLAMMATORY_RESPONSE':['Inflammation', 'Sensitivity to growth'],
+    'ANGIOGENESIS': ['Angiogenesis', 'Immune', 'Inflammation'],
+    'APICAL_JUNCTION': ['EMT and Metastasis', 'Angiogenesis'],
+    'APICAL_SURFACE': ['EMT and Metastasis', 'Angiogenesis'],
+    'APOPTOSIS': ['Apoptosis', 'Replication'],
+    'BILE_ACID_METABOLISM': ['Sensitivity to growth', 'Immune', 'Energetics'],
+    'CHOLESTEROL_HOMEOSTASIS': ['Sensitivity to growth', 'Immune', 'Energetics'],
+    'COAGULATION': ['Angiogenesis', 'Immune'],
+    'COMPLEMENT': ['Immune', 'Apoptosis'],
+    'DNA_REPAIR': ['Proliferative signal', 'Genome instability'],
+    'E2F_TARGETS': ['Proliferative signal'],
+    'EPITHELIAL_MESENCHYMAL_TRANSITION': ['EMT and Metastasis'],
+    'ESTROGEN_RESPONSE_EARLY': ['Sensitivity to growth'],
+    'FATTY_ACID_METABOLISM': ['Sensitivity to growth', 'Immune', 'Energetics'],
+    'G2M_CHECKPOINT': ['Proliferative signal', 'Genome instability'],
+    'GLYCOLYSIS': ['Sensitivity to growth'],
+    'HEDGEHOG_SIGNALING': ['Insensitivity to antigrowth', 'Immune', 'Sensitivity to growth'],
+    'HEME_METABOLISM': ['Angiogenesis'],
+    'HYPOXIA': ['Sensitivity to growth', 'EMT and Metastasis', 'Energetics'],
+    'IL2_STAT5_SIGNALING': ['Immune'],
+    'IL6_JAK_STAT3_SIGNALING': ['Insensitivity to antigrowth'],
+    'INFLAMMATORY_RESPONSE': ['Inflammation', 'Sensitivity to growth'],
     'INTERFERON_ALPHA_RESPONSE': ['Immune', 'Inflammation'],
-    'INTERFERON_GAMMA_RESPONSE':['Immune','Insensitivity to antigrowth'],
+    'INTERFERON_GAMMA_RESPONSE': ['Immune', 'Insensitivity to antigrowth'],
     'KRAS_SIGNALING_DN': ['Insensitivity to antigrowth'],
-    'KRAS_SIGNALING_UP':['Sensitivity to growth'],
-    'MITOTIC_SPINDLE':['Replication', 'Genome instability'],
-    'MTORC1_SIGNALING':['Apoptosis','Insensitivity to antigrowth', 'Energetics'],  
-    'MYC_TARGETS_V1':['Sensitivity to growth', 'Energetics'],
-    'MYC_TARGETS_V2':['Sensitivity to growth', 'Energetics'],
-    'MYOGENESIS':['EMT and Metastasis'],
-    'NOTCH_SIGNALING':['EMT and Metastasis','Insensitivity to antigrowth', 'Sensitivity to growth' ],
-    'OXIDATIVE_PHOSPHORYLATION':['Energetics'],
-    'P53_PATHWAY':['Apoptosis', 'Replication'],
-    'PANCREAS_BETA_CELLS':['Energetics'],
-    'PEROXISOME':['Energetics'],
-    'PI3K_AKT_MTOR_SIGNALING':['Apoptosis', 'Insensitivity to antigrowth', 'Energetics'],
-    'PROTEIN_SECRETION':['EMT and Metastasis', 'Angiogenesis'],
-    'REACTIVE_OXYGEN_SPECIES_PATHWAY':['Genome instability', 'Apoptosis'],
-    'SPERMATOGENESIS':['Proliferative signal'],
-    'TGF_BETA_SIGNALING':['Insensitivity to antigrowth', 'Immune'],
-    'TNFA_SIGNALING_VIA_NFKB':['Immune'],
-    'UNFOLDED_PROTEIN_RESPONSE':['EMT and Metastasis', 'Insensitivity to antigrowth', 'sensitivity to growth', 'Genome instability'],
-    'UV_RESPONSE_DN':['Genome instability', 'Proliferative signal'],
-    'UV_RESPONSE_UP':['Genome instability', 'Apoptosis'],
-    'WNT_BETA_CATENIN_SIGNALING':['Replication', 'Energetics', 'Immune', 'sensitivity to growth'],
-    'XENOBIOTIC_METABOLISM':['Immune']
+    'KRAS_SIGNALING_UP': ['Sensitivity to growth'],
+    'MITOTIC_SPINDLE': ['Replication', 'Genome instability'],
+    'MTORC1_SIGNALING': ['Apoptosis', 'Insensitivity to antigrowth', 'Energetics'],
+    'MYC_TARGETS_V1': ['Sensitivity to growth', 'Energetics'],
+    'MYC_TARGETS_V2': ['Sensitivity to growth', 'Energetics'],
+    'MYOGENESIS': ['EMT and Metastasis'],
+    'NOTCH_SIGNALING': ['EMT and Metastasis', 'Insensitivity to antigrowth', 'Sensitivity to growth'],
+    'OXIDATIVE_PHOSPHORYLATION': ['Energetics'],
+    'P53_PATHWAY': ['Apoptosis', 'Replication'],
+    'PANCREAS_BETA_CELLS': ['Energetics'],
+    'PEROXISOME': ['Energetics'],
+    'PI3K_AKT_MTOR_SIGNALING': ['Apoptosis', 'Insensitivity to antigrowth', 'Energetics'],
+    'PROTEIN_SECRETION': ['EMT and Metastasis', 'Angiogenesis'],
+    'REACTIVE_OXYGEN_SPECIES_PATHWAY': ['Genome instability', 'Apoptosis'],
+    'SPERMATOGENESIS': ['Proliferative signal'],
+    'TGF_BETA_SIGNALING': ['Insensitivity to antigrowth', 'Immune'],
+    'TNFA_SIGNALING_VIA_NFKB': ['Immune'],
+    'UNFOLDED_PROTEIN_RESPONSE': ['EMT and Metastasis', 'Insensitivity to antigrowth', 'sensitivity to growth', 'Genome instability'],
+    'UV_RESPONSE_DN': ['Genome instability', 'Proliferative signal'],
+    'UV_RESPONSE_UP': ['Genome instability', 'Apoptosis'],
+    'WNT_BETA_CATENIN_SIGNALING': ['Replication', 'Energetics', 'Immune', 'sensitivity to growth'],
+    'XENOBIOTIC_METABOLISM': ['Immune'],
 }
 
 MARKER_GENES_DEFAULT = {
@@ -132,16 +133,16 @@ MARKER_GENES_DEFAULT = {
 }
 
 CELLTYPE_MAP = {
-    'AT2': 0, 'Goblet (subsegmental)': 1, 'EC general capillary': 2, 'CD8 T cells': 3, 
-    'Club (nasal)': 4, 'Club (non-nasal)': 5, 'AT1': 6, 'Plasma cells': 7, 'Pericytes': 8, 
-    'Mesothelium': 9, 'Multiciliated (non-nasal)': 10, 'Mast cells': 11, 'Basal resting': 12, 
-    'Lymphatic EC differentiating': 13, 'Monocyte derived Mφ': 14, 'Non classical monocytes': 15, 
-    'Suprabasal': 16, 'Multiciliated (nasal)': 17, 'Alveolar macrophages': 18, 
-    'Transitional Club AT2': 19, 'Peribronchial fibroblasts': 20, 'Goblet (nasal)': 21, 
-    'SMG serous (nasal)': 22, 'NK cells': 23, 'Alveolar Mφ MT-positive': 24, 
-    'Classical monocytes': 25, 'B cells': 26, 'EC venous pulmonary': 27, 'CD4 T cells': 28,  
-    'DC2': 29, 'T cells proliferating': 30, 'Smooth muscle': 31, 'Adventitial fibroblasts': 32, 
-    'Plasmacytoid DCs': 33, 'Lymphatic EC proliferating': 34, 'EC aerocyte capillary': 35, 
+    'AT2': 0, 'Goblet (subsegmental)': 1, 'EC general capillary': 2, 'CD8 T cells': 3,
+    'Club (nasal)': 4, 'Club (non-nasal)': 5, 'AT1': 6, 'Plasma cells': 7, 'Pericytes': 8,
+    'Mesothelium': 9, 'Multiciliated (non-nasal)': 10, 'Mast cells': 11, 'Basal resting': 12,
+    'Lymphatic EC differentiating': 13, 'Monocyte derived Mφ': 14, 'Non classical monocytes': 15,
+    'Suprabasal': 16, 'Multiciliated (nasal)': 17, 'Alveolar macrophages': 18,
+    'Transitional Club AT2': 19, 'Peribronchial fibroblasts': 20, 'Goblet (nasal)': 21,
+    'SMG serous (nasal)': 22, 'NK cells': 23, 'Alveolar Mφ MT-positive': 24,
+    'Classical monocytes': 25, 'B cells': 26, 'EC venous pulmonary': 27, 'CD4 T cells': 28,
+    'DC2': 29, 'T cells proliferating': 30, 'Smooth muscle': 31, 'Adventitial fibroblasts': 32,
+    'Plasmacytoid DCs': 33, 'Lymphatic EC proliferating': 34, 'EC aerocyte capillary': 35,
     'Lymphatic EC mature': 36, 'Subpleural fibroblasts': 37, 'Migratory DCs': 38, 'Alveolar fibroblasts': 39,
     'Alveolar Mφ CCL3+': 40, 'EC arterial': 41, 'SM activated stress response': 42, 'Alveolar Mφ proliferating': 43,
     'SMG serous (bronchial)': 44, 'EC venous systemic': 45, 'Goblet (bronchial)': 46, 'Neuroendocrine': 47, 'DC1': 48,
@@ -150,8 +151,8 @@ CELLTYPE_MAP = {
 }
 
 class OncoTerrain:
-    def __init__(self, adata=None, *, sample_key: str = "sample", 
-                 user_marker_genes: Optional[Dict[str, Iterable[str]]] = None, 
+    def __init__(self, adata=None, *, sample_key: str = "sample",
+                 user_marker_genes: Optional[Dict[str, Iterable[str]]] = None,
                  user_celltype_vectors: Optional[pd.DataFrame] = None):
         logging.info("Initializing OncoTerrain")
         logging.basicConfig(level=logging.INFO)
@@ -160,8 +161,9 @@ class OncoTerrain:
         self.user_marker_genes = user_marker_genes
         self.user_celltype_vectors = user_celltype_vectors
         if self.adata is not None and self.user_celltype_vectors is not None:
-            missing = set(self.adata.obs_names) - set(self.user_celltype_vectors.index)
-            inter = self.user_celltype_vectors.loc[self.user_celltype_vectors.index.intersection(self.adata.obs_names)].copy()
+            inter = self.user_celltype_vectors.loc[
+                self.user_celltype_vectors.index.intersection(self.adata.obs_names)
+            ].copy()
             inter = inter.apply(pd.to_numeric, errors="coerce").fillna(0.0)
             inter.columns = [f"ctv_{c}" if not str(c).startswith("ctv_") else str(c) for c in inter.columns]
             self.adata.obs = self.adata.obs.join(inter, how="left")
@@ -193,7 +195,7 @@ class OncoTerrain:
             best_score = -np.inf
             for celltype, markers in marker_dict.items():
                 valid_markers = list(set(markers).intersection(adata.var_names))
-                if len(valid_markers) == 0:
+                if not valid_markers:
                     continue
                 avg_expr = subset_adata[:, valid_markers].X.mean()
                 if avg_expr > best_score:
@@ -294,12 +296,10 @@ class OncoTerrain:
                 self.adata = self._add_and_aggregate_module_scores(self.adata, Path(p))
         return self.adata
 
-    def _process_one_sample(self, adata_s, outdir, *, pca_n_comps=None, min_cells=3, min_genes=200,
-                            neighbors_n_pcs=None, neighbors_k=None, leiden_res=20.00):
+    def _process_one_sample(self, adata_s, outdir, *, pca_n_comps=None, min_cells=3, min_genes=200, neighbors_n_pcs=None, neighbors_k=None, leiden_res=20.00):
         _orig_adata = self.adata
         try:
             self.adata = adata_s.copy()
-
             self.adata = self._preprocessing(min_cells=min_cells, min_genes=min_genes)
             self.adata = self._ct_annotation(
                 pca_n_comps=pca_n_comps,
@@ -310,102 +310,112 @@ class OncoTerrain:
             self.adata = self._hp_calculation()
 
             with resources.as_file(resources.files("OncoTerrain") / "OncoTerrain.joblib") as p:
-                model_path = Path(p)
-            self.model_bundle = joblib.load(model_path)
-            self.OncoTerrain = self.model_bundle['model']
-            self.model_features = list(self.model_bundle['features'])
+                bundle = joblib.load(Path(p))
 
-            meta_data = self.adata.obs.copy()
-            columns = [
-                'disease','sample','source','tissue','n_genes','batch',
-                'n_genes_by_counts','total_counts','total_counts_mt','pct_counts_mt',
-                'leiden_res_0.10','leiden_res_1.00','leiden_res_5.00','leiden_res_10.00','leiden_res_20.00',
-                'leiden_res_0.10_celltype','leiden_res_1.00_celltype','leiden_res_5.00_celltype','leiden_res_10.00_celltype',
-                'tumor_stage','project'
+            self.OncoTerrain = bundle["model"]
+            self.model_features = list(bundle["features"])
+            self.scaler_trained = bundle.get("scaler", None)
+            self.label_map = bundle.get("label_map", {0: "Normal-like", 1: "Pre-malignant", 2: "Tumor-like"})
+
+            meta = self.adata.obs.copy()
+            drop_cols = [
+                "disease","sample","source","tissue","n_genes","batch",
+                "n_genes_by_counts","total_counts","total_counts_mt","pct_counts_mt",
+                "leiden_res_0.10","leiden_res_1.00","leiden_res_5.00","leiden_res_10.00","leiden_res_20.00",
+                "leiden_res_0.10_celltype","leiden_res_1.00_celltype","leiden_res_5.00_celltype","leiden_res_10.00_celltype",
+                "tumor_stage","project"
             ]
-            for col in columns:
-                if col in meta_data.columns:
-                    meta_data = meta_data.drop(col, axis=1)
+            for c in drop_cols:
+                if c in meta.columns:
+                    meta = meta.drop(columns=[c])
+            meta.columns = meta.columns.str.replace("^HALLMARK_", "", regex=True)
 
-            meta_data.columns = meta_data.columns.str.replace('^HALLMARK_', '', regex=True)
+            ctkey = f"leiden_res_{float(leiden_res):.2f}_celltype"
+            if ctkey not in meta.columns:
+                meta[ctkey] = "Unknown"
 
-            ctkey = f'leiden_res_{float(leiden_res):.2f}_celltype'
-            if ctkey not in meta_data.columns:
-                meta_data[ctkey] = 'Unknown'
+            rev_ct_map = {v: k for k, v in CELLTYPE_MAP.items()}
+            rev_ct_map[-1] = "Unknown"
+            mapped = meta[ctkey].astype(str).map(CELLTYPE_MAP)
+            meta[ctkey] = mapped.fillna(-1).astype(int)
+            celltype_labels = meta[ctkey].map(rev_ct_map)
 
-            reverse_celltype_map = {v: k for k, v in CELLTYPE_MAP.items()}
-            reverse_celltype_map[-1] = 'Unknown'
+            meta_X = meta.drop(columns=[ctkey])
+            meta_X = meta_X.apply(pd.to_numeric, errors="coerce")
+            bool_cols = meta_X.select_dtypes(include=["boolean", "bool"]).columns
+            if len(bool_cols):
+                meta_X[bool_cols] = meta_X[bool_cols].astype(np.float32)
+            meta_X.replace([np.inf, -np.inf], np.nan, inplace=True)
+            meta_X.fillna(0.0, inplace=True)
 
-            mapped = meta_data[ctkey].astype(str).map(CELLTYPE_MAP)
-            meta_data[ctkey] = mapped.fillna(-1).astype(int)
-            celltype_labels = meta_data[ctkey].map(reverse_celltype_map)
+            missing = set(self.model_features) - set(meta_X.columns)
+            for col in missing:
+                meta_X[col] = 0.0
+            extra = set(meta_X.columns) - set(self.model_features)
+            if extra:
+                meta_X = meta_X.drop(columns=list(extra))
+            meta_X = meta_X[self.model_features].astype(np.float32)
 
-            meta_data_X = meta_data.drop([ctkey], axis=1)
-            missing_cols = set(self.model_features) - set(meta_data_X.columns)
-            for col in missing_cols:
-                meta_data_X[col] = 0.0
-            meta_data_X = meta_data_X[self.model_features].astype(float)
+            if self.scaler_trained is not None:
+                X = self.scaler_trained.transform(pd.DataFrame(meta_X, columns=self.model_features, index=meta_X.index))
+            else:
+                X = MinMaxScaler().fit_transform(meta_X.values.astype(np.float32, copy=False))
+            if not np.isfinite(X).all():
+                X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
 
-            scaler = MinMaxScaler()
-            meta_data_X.loc[:, :] = scaler.fit_transform(meta_data_X.values)
+            model = self.OncoTerrain
+            if hasattr(model, "best_estimator_"):
+                model = model.best_estimator_
+            n_model = getattr(getattr(model, "network", None), "input_dim", getattr(model, "input_dim", None))
+            if n_model is not None and X.shape[1] != int(n_model):
+                raise ValueError(f"Feature mismatch: X has {X.shape[1]} columns, model expects {int(n_model)}")
 
-            y_val_pred = self.OncoTerrain.predict(meta_data_X.values)
-            class_labels = {0: 'Normal-like', 1: 'Pre-malignant', 2: 'Tumor-like'}
-            self.adata.obs['oncoterrain_class'] = [class_labels[int(label)] for label in y_val_pred]
-            self.adata.obs['celltype_readable'] = celltype_labels.values
+            if hasattr(model, "predict_proba"):
+                y_proba = model.predict_proba(X)
+                y_pred = np.argmax(y_proba, axis=1)
+            else:
+                y_pred = model.predict(X)
 
-            umap_model = umap.UMAP(n_neighbors=50, min_dist=0.05, metric='euclidean', random_state=42)
-            X_umap = umap_model.fit_transform(meta_data_X)
+            classes = self.label_map
+            try:
+                pred_readable = [classes.get(int(lbl), str(lbl)) for lbl in y_pred]
+            except Exception:
+                pred_readable = [classes.get(lbl, str(lbl)) for lbl in y_pred]
 
-            colors = plt.cm.tab20(np.linspace(0, 1, len(pd.unique(self.adata.obs['celltype_readable']))))
-            cell_type_color_map = dict(zip(pd.unique(self.adata.obs['celltype_readable']), colors))
-            color_palette = {0: "#84A970", 1: "#E4C282", 2: "#FF8C00"}
+            self.adata.obs["oncoterrain_class"] = pred_readable
+            self.adata.obs["celltype_readable"] = celltype_labels.values
+
+            umap_model = umap.UMAP(n_neighbors=50, min_dist=0.05, metric="euclidean", random_state=42)
+            X_umap = umap_model.fit_transform(meta_X.values)
+
+            colors = plt.cm.tab20(np.linspace(0, 1, len(pd.unique(self.adata.obs["celltype_readable"]))))
+            _ = dict(zip(pd.unique(self.adata.obs["celltype_readable"]), colors))
+            label_palette = {"Normal-like": "#84A970", "Pre-malignant": "#E4C282", "Tumor-like": "#FF8C00"}
 
             plt.figure(figsize=(20, 10))
             plt.subplot(1, 2, 1)
-            sns.scatterplot(x=X_umap[:, 0], y=X_umap[:, 1], hue=y_val_pred, palette=color_palette, s=10, legend="brief")
-            plt.title('UMAP Projection - Predicted Labels', fontsize=14)
-
+            sns.scatterplot(x=X_umap[:, 0], y=X_umap[:, 1], hue=self.adata.obs["oncoterrain_class"], palette=label_palette, s=10, legend="brief")
+            plt.title("UMAP Projection - Predicted Labels", fontsize=14)
             plt.subplot(1, 2, 2)
-            sns.scatterplot(x=X_umap[:, 0], y=X_umap[:, 1], hue=self.adata.obs['celltype_readable'], s=10, legend="brief")
-            plt.title('UMAP Projection - Cell Type', fontsize=14)
-
+            sns.scatterplot(x=X_umap[:, 0], y=X_umap[:, 1], hue=self.adata.obs["celltype_readable"], s=10, legend="brief")
+            plt.title("UMAP Projection - Cell Type", fontsize=14)
             for ax in plt.gcf().axes:
                 ax.grid(False)
-                for side in ('top', 'right', 'bottom', 'left'):
+                for side in ("top", "right", "bottom", "left"):
                     ax.spines[side].set_linewidth(2)
 
             outdir.mkdir(parents=True, exist_ok=True)
             plt.tight_layout()
-            plt.savefig(outdir / "umap.png", dpi=300, bbox_inches='tight')
+            plt.savefig(outdir / "umap.png", dpi=300, bbox_inches="tight")
             plt.close()
 
             self.adata.write_h5ad(outdir / "OncoTerrain_annotated.h5ad")
             return self.adata
-
         finally:
             self.adata = _orig_adata
 
-    def inferencing(self, save_path, save_adata=True, *, pca_n_comps=None, neighbors_n_pcs=None, 
+    def inferencing(self, save_path, save_adata=True, *, pca_n_comps=None, neighbors_n_pcs=None,
                     neighbors_k=None, leiden_res=20.00, min_cells=3, min_genes=200):
-        """
-        Run OncoTerrain across samples, with user-tunable dimensionality and clustering.
-
-        Parameters
-        ----------
-        save_path : str or Path
-            Directory where per-sample outputs and the concatenated .h5ad (if requested) are written.
-        save_adata : bool, default True
-            Whether to write the concatenated annotated AnnData to disk.
-        pca_n_comps : int or None
-            Number of PCs to compute. If None, auto = min(50, rank) with lower bound of 2.
-        neighbors_n_pcs : int or None
-            Number of PCs to use for kNN graph. If None, auto = min(40, available PCs).
-        neighbors_k : int or None
-            Number of neighbors (k) for the kNN graph. If None, auto = min(15, n_obs-1), bounded to >=2.
-        leiden_res : float, default 20.00
-            Resolution for Leiden clustering.
-        """
         if self.adata is None:
             raise AttributeError("AnnData is None")
 
@@ -415,23 +425,18 @@ class OncoTerrain:
         if self.sample_key not in self.adata.obs.columns:
             raise KeyError(f"'{self.sample_key}' not found in adata.obs")
 
-        col = self.adata.obs[self.sample_key]
-        col = col.astype(str).str.strip()
+        col = self.adata.obs[self.sample_key].astype(str).str.strip()
         self.adata.obs[self.sample_key] = col
 
         vc = col.value_counts(dropna=False)
 
-        annotated_list = []
-        skipped = []
+        annotated_list, skipped = [], []
 
         for sample_id in col.unique():
             mask = (self.adata.obs[self.sample_key] == sample_id)
-
             n = int(mask.sum())
             if n == 0:
-                logging.warning(
-                    f"[OncoTerrain] Skipping sample '{sample_id}': 0 cells after filtering."
-                )
+                logging.warning(f"[OncoTerrain] Skipping sample '{sample_id}': 0 cells after filtering.")
                 skipped.append(sample_id)
                 continue
 
@@ -442,7 +447,6 @@ class OncoTerrain:
                 .replace(" ", "_")
             )
             outdir = save_path / safe_id
-
             adata_s = self.adata[mask, :].copy()
 
             ann_s = self._process_one_sample(
@@ -486,14 +490,110 @@ class OncoTerrain:
 
         return adata_concat
 
-    def _safe_name(self, s: str) -> str: 
-        s = str(s).strip() 
-        for ch in ['/', '\\', ':', '*', '?', '"', '<', '>', '|', ' ']: 
-            s = s.replace(ch, '_') 
+    def predict_proba_from_adata(self, *, pca_n_comps=None, neighbors_n_pcs=None, neighbors_k=None, leiden_res=20.00):
+        self.adata = self._preprocessing()
+        self.adata = self._ct_annotation(
+            pca_n_comps=pca_n_comps,
+            neighbors_n_pcs=neighbors_n_pcs,
+            neighbors_k=neighbors_k,
+            leiden_res=leiden_res,
+        )
+        self.adata = self._hp_calculation()
+
+        with resources.as_file(resources.files("OncoTerrain") / "OncoTerrain.joblib") as p:
+            bundle = joblib.load(p)
+
+        model = bundle["model"]
+        feature_list = list(bundle["features"])
+        scaler_trained = bundle.get("scaler", None)
+        label_map = bundle.get("label_map", {0: "Normal-like", 1: "Pre-malignant", 2: "Tumor-like"})
+
+        meta = self.adata.obs.copy()
+        drop_cols = [
+            "disease","sample","source","tissue","n_genes","batch",
+            "n_genes_by_counts","total_counts","total_counts_mt","pct_counts_mt",
+            "leiden_res_0.10","leiden_res_1.00","leiden_res_5.00","leiden_res_10.00","leiden_res_20.00",
+            "leiden_res_0.10_celltype","leiden_res_1.00_celltype","leiden_res_5.00_celltype","leiden_res_10.00_celltype",
+            "tumor_stage","project"
+        ]
+        for c in drop_cols:
+            if c in meta.columns:
+                meta = meta.drop(columns=[c])
+        meta.columns = meta.columns.str.replace("^HALLMARK_", "", regex=True)
+
+        ctkey = f"leiden_res_{float(leiden_res):.2f}_celltype"
+        if ctkey not in meta.columns:
+            meta[ctkey] = "Unknown"
+        meta_X = meta.drop(columns=[ctkey])
+
+        meta_X = meta_X.apply(pd.to_numeric, errors="coerce")
+        bool_cols = meta_X.select_dtypes(include=["boolean", "bool"]).columns
+        if len(bool_cols):
+            meta_X[bool_cols] = meta_X[bool_cols].astype(np.float32)
+        meta_X.replace([np.inf, -np.inf], np.nan, inplace=True)
+        meta_X.fillna(0.0, inplace=True)
+
+        for col in feature_list:
+            if col not in meta_X.columns:
+                meta_X[col] = 0.0
+        extra = set(meta_X.columns) - set(feature_list)
+        if extra:
+            meta_X = meta_X.drop(columns=list(extra))
+        meta_X = meta_X[feature_list].astype(np.float32)
+
+        if scaler_trained is not None:
+            X = scaler_trained.transform(pd.DataFrame(meta_X, columns=feature_list, index=meta_X.index))
+        else:
+            X = MinMaxScaler().fit_transform(meta_X.values.astype(np.float32, copy=False))
+        if not np.isfinite(X).all():
+            X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+
+        if hasattr(model, "best_estimator_"):
+            model = model.best_estimator_
+        n_model = getattr(getattr(model, "network", None), "input_dim", getattr(model, "input_dim", None))
+        if n_model is not None and X.shape[1] != int(n_model):
+            raise ValueError(f"Feature mismatch: X has {X.shape[1]} columns, model expects {int(n_model)}")
+
+        if hasattr(model, "predict_proba"):
+            proba = model.predict_proba(X)
+        else:
+            if hasattr(model, "decision_function"):
+                df = np.asarray(model.decision_function(X))
+                if df.ndim == 1:
+                    p = 1.0 / (1.0 + np.exp(-df))
+                    proba = np.vstack([1 - p, p]).T
+                else:
+                    e = np.exp(df - df.max(axis=1, keepdims=True))
+                    proba = e / e.sum(axis=1, keepdims=True)
+            else:
+                preds = model.predict(X)
+                classes_model = getattr(model, "classes_", np.unique(preds))
+                m = {c: i for i, c in enumerate(classes_model)}
+                proba = np.zeros((len(preds), len(classes_model)), dtype=float)
+                for i, p in enumerate(preds):
+                    proba[i, m[p]] = 1.0
+
+        classes_attr = getattr(model, "classes_", None)
+        if classes_attr is None:
+            class_names = [label_map.get(i, str(i)) for i in range(proba.shape[1])]
+        else:
+            try:
+                class_names = [label_map.get(int(c), str(c)) for c in list(classes_attr)]
+            except Exception:
+                class_names = [str(c) for c in list(classes_attr)]
+
+        pred_idx = np.argmax(proba, axis=1)
+        pred_readable = [class_names[i] for i in pred_idx]
+        return proba, class_names, pred_readable
+
+    def _safe_name(self, s: str) -> str:
+        s = str(s).strip()
+        for ch in ['/', '\\', ':', '*', '?', '"', '<', '>', '|', ' ']:
+            s = s.replace(ch, '_')
         return s or "unnamed"
 
     def _circ_heatmap_plotter(self, meta_data, save_path, *, groupby_column='project',
-                          sample_id=None, scale_range=(0, 100), stage_label=None):
+                              sample_id=None, scale_range=(0, 100), stage_label=None):
         md = meta_data.copy()
         cond_keys = set(CONDITIONS.keys())
 
@@ -502,7 +602,8 @@ class OncoTerrain:
                 uniq = md[groupby_column].dropna().unique()
                 if len(uniq) != 1:
                     raise ValueError(
-                        f"Provide sample_id. Found {len(uniq)} unique values in '{groupby_column}': {list(map(str, uniq))[:10]}..."
+                        f"Provide sample_id. Found {len(uniq)} unique values in '{groupby_column}': "
+                        f"{list(map(str, uniq))[:10]}..."
                     )
                 sample_id = str(uniq[0])
             md = md[md[groupby_column].astype(str) == str(sample_id)]
@@ -524,10 +625,7 @@ class OncoTerrain:
         numeric_cols = md.select_dtypes(include=[np.number]).columns.tolist()
         hallmark_cols = [c for c in numeric_cols if c in cond_keys]
         if len(hallmark_cols) == 0:
-            raise ValueError(
-                "No numeric hallmark columns found after renaming. "
-                "Ensure you have HALLMARK_* scores or bare hallmark columns."
-            )
+            raise ValueError("No numeric hallmark columns found after renaming.")
 
         pb = md[hallmark_cols].mean(axis=0).to_frame(name='mean_score').reset_index()
         pb = pb.rename(columns={'index': 'hallmark'})
@@ -536,7 +634,7 @@ class OncoTerrain:
         pb = pb.dropna(subset=['mean_score', 'Condition'])
         pb = pb[pb['Condition'].str.strip().ne('')]
         if pb.empty:
-            raise ValueError("No usable hallmarks after dropping NaN mean scores or blank conditions.")
+            raise ValueError("No usable hallmarks after filtering.")
 
         expanded = pb[['hallmark', 'mean_score', 'Condition']].copy()
         expanded = expanded.assign(Condition=expanded['Condition'].str.split(', ')).explode('Condition')
@@ -596,11 +694,10 @@ class OncoTerrain:
         ax.bar(ANGLES, VALUES, width=WIDTH, color=COLORS, edgecolor="white", linewidth=2)
 
         if n > 0:
-            from itertools import groupby
             idxs = np.arange(n)
             for cond, run in groupby(zip(idxs, GROUPS), key=lambda t: t[1]):
                 run_idxs = [i for (i, _) in run]
-                if len(run_idxs) == 0:
+                if not run_idxs:
                     continue
                 theta = np.mean(ANGLES[run_idxs])
                 rot = np.rad2deg(theta)
@@ -623,14 +720,14 @@ class OncoTerrain:
 
         title_suffix = f" • {stage_label}" if stage_label else ""
         ax.set_title(f"Circular Heatmap — {groupby_column}={sample_id}{title_suffix}",
-                    pad=20, fontsize=18, fontweight="bold")
+                     pad=20, fontsize=18, fontweight="bold")
 
         plt.tight_layout()
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         plt.show()
 
     def circular_heatmap(self, meta_data, save_path, *, groupby_column='project',
-                        scale_range=(0, 100), stage_label=None):
+                         scale_range=(0, 100), stage_label=None):
         if groupby_column not in meta_data.columns:
             raise KeyError(f"'{groupby_column}' not found in meta_data columns")
 
