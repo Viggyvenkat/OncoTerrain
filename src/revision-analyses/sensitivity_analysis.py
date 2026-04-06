@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import functools
 import logging
 from pathlib import Path
 
 import joblib
+import torch
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -69,10 +71,18 @@ def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     log.info("Loading OncoTerrain bundle: %s", ONCOTERRAIN_JOBLIB)
-    bundle = joblib.load(ONCOTERRAIN_JOBLIB)
+    _orig_torch_load = torch.load
+    torch.load = functools.partial(_orig_torch_load, map_location=torch.device("cpu"))
+    try:
+        bundle = joblib.load(ONCOTERRAIN_JOBLIB)
+    finally:
+        torch.load = _orig_torch_load
     model = bundle["model"]
     if hasattr(model, "best_estimator_"):
         model = model.best_estimator_
+    model.device = torch.device("cpu")
+    if hasattr(model, "network") and model.network is not None:
+        model.network = model.network.to("cpu")
     features = list(bundle["features"])
     scaler = bundle["scaler"]
 

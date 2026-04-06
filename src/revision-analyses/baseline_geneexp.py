@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import functools
 import json
 import logging
 from pathlib import Path
 
 import joblib
+import torch
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -134,10 +136,18 @@ def main():
     log.info("Gene-expression feature matrix: %s", X_gene.shape)
 
     log.info("Loading OncoTerrain bundle: %s", ONCOTERRAIN_JOBLIB)
-    bundle = joblib.load(ONCOTERRAIN_JOBLIB)
+    _orig_torch_load = torch.load
+    torch.load = functools.partial(_orig_torch_load, map_location=torch.device("cpu"))
+    try:
+        bundle = joblib.load(ONCOTERRAIN_JOBLIB)
+    finally:
+        torch.load = _orig_torch_load
     ot_model = bundle["model"]
     if hasattr(ot_model, "best_estimator_"):
         ot_model = ot_model.best_estimator_
+    ot_model.device = torch.device("cpu")
+    if hasattr(ot_model, "network") and ot_model.network is not None:
+        ot_model.network = ot_model.network.to("cpu")
     ot_features = list(bundle["features"])
     ot_scaler = bundle["scaler"]
 

@@ -18,3 +18,4 @@ src/OncoTerrain.egg-info
 src/OncoTerrain/OncoTerrain.joblib
 dist
 .venv-test
+src/revision-analyses/outputs
