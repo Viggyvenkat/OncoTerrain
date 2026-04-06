@@ -11,5 +11,8 @@
 #SBATCH --error=slurm.%N.%j.err   # STDERR output file (optional)
 
 module load python/3.13.1
+source /cache/home/vvv11/miniforge3/etc/profile.d/conda.sh
+set +u
 conda activate revision
+set -u
 python baseline_geneexp.py
