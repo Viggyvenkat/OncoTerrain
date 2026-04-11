@@ -2,6 +2,8 @@ name: revision
 channels:
   - conda-forge
   - bioconda
+  - pytorch
+  - nvidia
 dependencies:
   - python=3.10
   - pip
@@ -19,7 +21,9 @@ dependencies:
   - leidenalg
   - python-igraph
   - umap-learn
-  - pytorch
+  - pytorch::pytorch
+  - pytorch::torchvision
+  - pytorch::pytorch-cuda=12.1
   - pip:
       - pytorch-tabnet
       - gseapy

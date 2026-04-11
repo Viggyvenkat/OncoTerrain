@@ -3,47 +3,20 @@ import os
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from scipy.stats import f_oneway
-from statsmodels.stats.multicomp import pairwise_tukeyhsd
-import torch 
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-from sklearn.model_selection import train_test_split, RandomizedSearchCV, StratifiedKFold
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, LabelEncoder
-from sklearn.feature_selection import VarianceThreshold
-from sklearn.linear_model import LogisticRegression
-from sklearn.gaussian_process.kernels import RBF
-from sklearn.metrics import (
-    accuracy_score, precision_score, recall_score, f1_score, roc_curve,
-    auc, classification_report, confusion_matrix, RocCurveDisplay
-)
-from sklearn.utils.class_weight import compute_class_weight
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
+from sklearn.preprocessing import  MinMaxScaler
+from sklearn.metrics import (roc_curve, auc, confusion_matrix,)
 from sklearn.preprocessing import label_binarize
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
 import seaborn as sns
 import matplotlib.colors as mcolors
-import matplotlib.cm as cm
-from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.patches import Patch
-from matplotlib.lines import Line2D
 import matplotlib.patches as mpatches
 from matplotlib.colors import ListedColormap
 from sklearn.metrics.pairwise import cosine_similarity
-import umap
-from sklearn.decomposition import PCA
-from sklearn.cluster import DBSCAN
-import pingouin as pg
-from pingouin import compute_effsize
 import logging
 from pytorch_tabnet.tab_model import TabNetClassifier
 import scanpy as sc
-from py_monocle import (
-    learn_graph, order_cells, compute_cell_states, regression_analysis, 
-    differential_expression_genes
-)
 import joblib
 import logging
 import matplotlib.colors as mcolors
@@ -57,11 +30,8 @@ from OncoTerrain.OncoTerrain import OncoTerrain
 np.random.seed(42)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-import scprep
 from scipy import sparse
 import scipy.sparse as sp
-
 from pathlib import Path
 import logging
 import numpy as np
@@ -906,42 +876,42 @@ if __name__ == '__main__':
 
     updated_meta_data, _, _ = __feature_analysis_w_preprocessing(meta_data)
     
-    # numeric_cols_main = updated_meta_data.select_dtypes(include=[np.number]).columns
-    # NON_FEATURES = {'tumor_stage', 'project', 'leiden_res_20.00_celltype', 'leiden_res_0.50', 'leiden_res_2.00'}
-    # feature_cols = [c for c in numeric_cols_main if c not in NON_FEATURES]
-    # hallmark_list = [c for c in feature_cols if c in CONDITIONS.keys()]
-    # logging.info(f"Identified hallmark features: {list(hallmark_list)}")
+    numeric_cols_main = updated_meta_data.select_dtypes(include=[np.number]).columns
+    NON_FEATURES = {'tumor_stage', 'project', 'leiden_res_20.00_celltype', 'leiden_res_0.50', 'leiden_res_2.00'}
+    feature_cols = [c for c in numeric_cols_main if c not in NON_FEATURES]
+    hallmark_list = [c for c in feature_cols if c in CONDITIONS.keys()]
+    logging.info(f"Identified hallmark features: {list(hallmark_list)}")
     
-    # features = updated_meta_data[feature_cols].to_numpy()
-    # tumor_stage = updated_meta_data['tumor_stage']
+    features = updated_meta_data[feature_cols].to_numpy()
+    tumor_stage = updated_meta_data['tumor_stage']
     
-    # logging.info("Initializing UMAP reducer with parameters: n_neighbors=50, min_dist=0.05, metric='euclidean'")
-    # reducer = umap.UMAP(n_neighbors=50, min_dist=0.05, metric='euclidean', random_state=42)
+    logging.info("Initializing UMAP reducer with parameters: n_neighbors=50, min_dist=0.05, metric='euclidean'")
+    reducer = umap.UMAP(n_neighbors=50, min_dist=0.05, metric='euclidean', random_state=42)
     
-    # logging.info("Fitting UMAP to features and transforming.")
-    # embedding = reducer.fit_transform(features)
-    # logging.info("UMAP embedding shape: %s", embedding.shape)
+    logging.info("Fitting UMAP to features and transforming.")
+    embedding = reducer.fit_transform(features)
+    logging.info("UMAP embedding shape: %s", embedding.shape)
     
-    # fig5B_path = BASE_DIR / 'figures/fig-5B.png'
-    # fig5C_path = BASE_DIR / 'figures/fig-5C'
-    # fig5D_path = BASE_DIR / 'figures/fig-5D.png'
+    fig5B_path = BASE_DIR / 'figures/fig-5B.png'
+    fig5C_path = BASE_DIR / 'figures/fig-5C'
+    fig5D_path = BASE_DIR / 'figures/fig-5D.png'
 
-    # df = mannwhitney_by_stage_all_columns(
-    #     updated_meta_data,
-    #     stage_key="tumor_stage",
-    #     stage_order=(0, 1, 2),  
-    #     exclude_cols=("project", "leiden_res_20.00_celltype"),
-    #     output_csv="figures/supplementary_table_three.csv"
-    # )
+    df = mannwhitney_by_stage_all_columns(
+        updated_meta_data,
+        stage_key="tumor_stage",
+        stage_order=(0, 1, 2),  
+        exclude_cols=("project", "leiden_res_20.00_celltype"),
+        output_csv="figures/supplementary_table_three.csv"
+    )
     
     logging.info("Generating figure 5B.")
-    # __figure_five_B(updated_meta_data, save_path=str(fig5B_path), embedding=embedding)
+    __figure_five_B(updated_meta_data, save_path=str(fig5B_path), embedding=embedding)
     
     logging.info("Generating figure 5C.")
-    # __figure_five_C(updated_meta_data, save_path=str(fig5C_path), embedding=embedding, hallmark_list=hallmark_list)
+    __figure_five_C(updated_meta_data, save_path=str(fig5C_path), embedding=embedding, hallmark_list=hallmark_list)
     
     logging.info("Generating figure 5D.")
-    # __figure_five_D(updated_meta_data, save_path=str(fig5D_path))
+    __figure_five_D(updated_meta_data, save_path=str(fig5D_path))
 
     stages_to_plot = {
         0: "Non-Cancer",
@@ -949,16 +919,16 @@ if __name__ == '__main__':
         2: "Advanced"
     }
 
-    # for stage_key, stage_label in stages_to_plot.items():
-    #     fig5E_path = BASE_DIR / f'figures/fig-5E-{stage_label}.png'
-    #     logging.info(f"Generating figure 5E for {stage_label}.")
-    #     figure_five_E(
-    #         updated_meta_data,
-    #         save_path=str(fig5E_path),
-    #         stage=stage_key,        
-    #         stage_column='tumor_stage',
-    #         stage_label=stage_label
-    #     )
+    for stage_key, stage_label in stages_to_plot.items():
+        fig5E_path = BASE_DIR / f'figures/fig-5E-{stage_label}.png'
+        logging.info(f"Generating figure 5E for {stage_label}.")
+        figure_five_E(
+            updated_meta_data,
+            save_path=str(fig5E_path),
+            stage=stage_key,        
+            stage_column='tumor_stage',
+            stage_label=stage_label
+        )
     
     logging.info("Training model.")
     model = __train_model(updated_meta_data)

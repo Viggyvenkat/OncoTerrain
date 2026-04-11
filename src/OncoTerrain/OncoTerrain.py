@@ -288,8 +288,8 @@ class OncoTerrain:
                 sc.tl.score_genes(adata, genes_in_adata, score_name=pathway)
         return adata
 
-    def _hp_calculation(self):
-        gmt_root = resources.files("OncoTerrain") / "HallmarkPathGMT"
+    def hp_calculation(self):
+        gmt_root = Path(__file__).resolve().parent / "HallmarkPathGMT"
         gmt_files = [p for p in gmt_root.iterdir() if p.name.endswith(".gmt")]
         for gmt in gmt_files:
             with resources.as_file(gmt) as p:
