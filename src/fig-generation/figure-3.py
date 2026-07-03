@@ -17,6 +17,10 @@ from statsmodels.stats.multitest import multipletests
 import scipy.sparse as sps
 import matplotlib.patches as mpatches
 
+from source_data_common import (
+    panel_csv, long_from_group_dict, mwu_with_direction, write_pvalues, aggregate_to_excel,
+)
+
 logging.basicConfig(
     level=logging.INFO,
     format='[%(asctime)s] %(levelname)s:%(message)s',
@@ -770,7 +774,7 @@ def __figure_three_F_3(adata, save_dir=None):
         plt.close(fig)
 
 
-def __figure_three_G(adata, save_path=None):
+def __figure_three_G(adata, save_path=None, source_data=False):
     # Filter for T cells
     t_cells = adata[
         adata.obs['leiden_res_20.00_celltype']
@@ -817,6 +821,19 @@ def __figure_three_G(adata, save_path=None):
     results_df.to_csv(results_csv_path, index=False)
     print(f"Significance results saved to: {results_csv_path}")
 
+    if source_data:
+        dbs = {st: data_by_stage[k] for k, st in enumerate(stages)}
+        panel_csv(3, '3G_IL6_JAK_STAT_by_stage',
+                  long_from_group_dict(dbs, feature='HALLMARK_IL6_JAK_STAT3_SIGNALING',
+                                       group_col='tumor_stage'))
+        rows = []
+        for r in results:
+            stat = mwu_with_direction(dbs[r['group1']], dbs[r['group2']], r['group1'], r['group2'])
+            stat.update(panel='3G', feature='HALLMARK_IL6_JAK_STAT3_SIGNALING',
+                        p_value_adj=r['p_value_adj'], correction_method='bonferroni')
+            rows.append(stat)
+        write_pvalues(3, rows)
+
     # Plot boxplots (no annotations)
     fig, ax = plt.subplots(figsize=(6, 6))
     bp = ax.boxplot(
@@ -849,7 +866,7 @@ def __figure_three_G(adata, save_path=None):
     else:
         plt.show()
 
-def __figure_three_H(adata, save_path = None):
+def __figure_three_H(adata, save_path = None, source_data=False):
     fibroblast_cells = adata[
         adata.obs['leiden_res_20.00_celltype']
         .isin([
@@ -889,6 +906,16 @@ def __figure_three_H(adata, save_path = None):
             pct = (sub['FAP'] > 0).sum() / len(sub) * 100
         pct_expressing.append(pct)
 
+    if source_data:
+        n_by_stage = [int((df['tumor_stage'] == st).sum()) for st in stages]
+        n_pos = [int(((df['tumor_stage'] == st) & (df['FAP'] > 0)).sum()) for st in stages]
+        panel_csv(3, '3H_FAP_positive_fibroblasts', pd.DataFrame({
+            'tumor_stage': stages,
+            'n_fibroblasts': n_by_stage,
+            'n_FAP_positive': n_pos,
+            'percent_FAP_positive': pct_expressing,
+        }))
+
     fig, ax = plt.subplots(figsize=(6, 5))
     bars = ax.bar(
         stages,
@@ -919,7 +946,7 @@ def __figure_three_H(adata, save_path = None):
     else:
         plt.show()
 
-def __figure_three_I(adata, save_path=None):
+def __figure_three_I(adata, save_path=None, source_data=False):
     t_cells = adata[
         adata.obs['leiden_res_20.00_celltype']
         .isin(['CD8 T cells', 'CD4 T cells', 'T cells proliferating'])
@@ -960,6 +987,11 @@ def __figure_three_I(adata, save_path=None):
 
     stage_pct_df = stage_pct_df.fillna(0)
     logging.info("Phenotype breakdown for Figure 3I:\n%s", stage_pct_df.applymap(lambda x: f"{x:.1f}%").to_string())
+
+    if source_data:
+        out = stage_pct_df.copy()
+        out.index.name = 'phenotype'
+        panel_csv(3, '3I_tcell_phenotype_pct_by_stage', out.reset_index())
 
 
     cmap = cm.get_cmap('tab20', len(all_phenos))
@@ -1023,7 +1055,7 @@ def __figure_three_I(adata, save_path=None):
     else:
         plt.show()
 
-def __figure_three_J(adata, save_path=None):
+def __figure_three_J(adata, save_path=None, source_data=False):
 
     myeloid = adata[
         adata.obs['leiden_res_20.00_celltype']
@@ -1078,6 +1110,11 @@ def __figure_three_J(adata, save_path=None):
     stage_pct_df = stage_pct_df.fillna(0)
     logging.info("Phenotype breakdown for Figure 3J:\n%s", stage_pct_df.applymap(lambda x: f"{x:.1f}%").to_string())
 
+    if source_data:
+        out = stage_pct_df.copy()
+        out.index.name = 'phenotype'
+        panel_csv(3, '3J_myeloid_phenotype_pct_by_stage', out.reset_index())
+
     cmap = cm.get_cmap('tab20c', len(all_phenos))
     colors = [cmap(i) for i in range(len(all_phenos))]
 
@@ -1122,7 +1159,7 @@ def __figure_three_J(adata, save_path=None):
     else:
         plt.show()
 
-def __figure_three_K(adata, save_path=None):
+def __figure_three_K(adata, save_path=None, source_data=False):
     fibro = adata[
         adata.obs['leiden_res_20.00_celltype']
         .isin([
@@ -1170,6 +1207,11 @@ def __figure_three_K(adata, save_path=None):
     stage_pct_df = stage_pct_df.fillna(0)
     logging.info("Phenotype breakdown for Figure 3K:\n%s", stage_pct_df.applymap(lambda x: f"{x:.1f}%").to_string())
 
+    if source_data:
+        out = stage_pct_df.copy()
+        out.index.name = 'phenotype'
+        panel_csv(3, '3K_fibroblast_phenotype_pct_by_stage', out.reset_index())
+
     cmap = cm.get_cmap('tab10', len(all_phenos))
     colors = [cmap(i) for i in range(len(all_phenos))]
 
@@ -1214,7 +1256,7 @@ def __figure_three_K(adata, save_path=None):
     else:
         plt.show()
 
-def __figure_three_L(adata, save_path=None):
+def __figure_three_L(adata, save_path=None, source_data=False):
     kras_mean = adata.obs["HALLMARK_KRAS_SIGNALING_UP"].mean()
     egfr_mean = adata.obs["REACTOME_SIGNALING_BY_EGFR_IN_CANCER"].mean()
     adata.obs["KRAS_high"] = adata.obs["HALLMARK_KRAS_SIGNALING_UP"] > kras_mean
@@ -1316,6 +1358,22 @@ def __figure_three_L(adata, save_path=None):
     csv_path = figures_dir / "figure_three_L_significance.csv"
     pd.DataFrame(results).to_csv(csv_path, index=False)
     print(f"Saved KRAS/EGFR-group significance (both panels) to: {csv_path}")
+
+    if source_data:
+        for subset_name, (subset, gene) in subsets.items():
+            data_by_grp = _values_by_group(subset, gene)
+            panel_csv(3, f'3L_{subset_name}_{gene}_by_kras_egfr',
+                      long_from_group_dict(data_by_grp, feature=gene, group_col='kras_egfr_group'))
+        rows = []
+        for r in results:
+            subset, gene = subsets[r['panel']]
+            data_by_grp = _values_by_group(subset, gene)
+            stat = mwu_with_direction(data_by_grp[r['group1']], data_by_grp[r['group2']],
+                                      r['group1'], r['group2'])
+            stat.update(panel=f"3L_{r['panel']}", feature=gene,
+                        p_value_adj=r['p_value_adj_fdr_bh'], correction_method='fdr_bh')
+            rows.append(stat)
+        write_pvalues(3, rows)
 
     # -------------------- Plot (unchanged) --------------------
     fig, axes = plt.subplots(1, 2, figsize=(10, 5), sharey=False)
@@ -1614,7 +1672,7 @@ def __figure_three_state_change(adata, save_dir=None):
 
     print(f"Saved Figure 3B to:\n  - {png_path}\n  - {pdf_path}")
 
-def __figure_three_endothelial_barplot(adata, save_path=None):
+def __figure_three_endothelial_barplot(adata, save_path=None, source_data=False):
     """
     Stacked barplot of endothelial 'phenotypes' by tumor stage based on
     PLVAP / FLT1 / KDR expression above/below median within endothelial cells.
@@ -1686,6 +1744,11 @@ def __figure_three_endothelial_barplot(adata, save_path=None):
 
     logging.info("Endothelial phenotype breakdown (Angiogenesis markers):\n%s",
                  stage_pct_df.applymap(lambda x: f"{x:.1f}%").to_string())
+
+    if source_data:
+        out = stage_pct_df.copy()
+        out.index.name = 'phenotype'
+        panel_csv(3, '3_endothelial_phenotype_pct_by_stage', out.reset_index())
 
     # Plot
     # Use a larger qualitative colormap in case there are many phenotypes
@@ -1898,7 +1961,7 @@ def __figure_three_C_endothelial(adata, save_path=None):
 
     return ec_cells
 
-def __figure_three_G_endothelial(adata, save_path=None):
+def __figure_three_G_endothelial(adata, save_path=None, source_data=False):
     """
     Boxplots of HALLMARK_ANGIOGENESIS by tumor stage for endothelial cells,
     with pairwise Mann–Whitney U tests (Bonferroni-corrected).
@@ -1970,6 +2033,18 @@ def __figure_three_G_endothelial(adata, save_path=None):
     results_csv_path = figures_dir / "figure_three_G_endothelial_significance.csv"
     results_df.to_csv(results_csv_path, index=False)
     print(f"Significance results saved to: {results_csv_path}")
+
+    if source_data:
+        dbs = {st: data_by_stage[k] for k, st in enumerate(stages)}
+        panel_csv(3, '3G_endothelial_ANGIOGENESIS_by_stage',
+                  long_from_group_dict(dbs, feature=score_col, group_col='tumor_stage'))
+        rows = []
+        for r in results:
+            stat = mwu_with_direction(dbs[r['group1']], dbs[r['group2']], r['group1'], r['group2'])
+            stat.update(panel='3G_endothelial', feature=score_col,
+                        p_value_adj=r['p_value_adj'], correction_method='bonferroni')
+            rows.append(stat)
+        write_pvalues(3, rows)
 
     # Plot boxplots (no annotations)
     fig, ax = plt.subplots(figsize=(6, 6))
@@ -2099,9 +2174,40 @@ def __figure_three_F_endothelial(adata, save_dir="figures/fig3F_endothelial"):
         print(f"Saved: {out_path}")
 
 
+def export_figure_three_source_data(adata, base_dir):
+    """Run only the quantitative graph panels with source-data export enabled.
+
+    Box/violin panels 3G, 3G-endothelial, 3L (Mann-Whitney U -> p-values) and the
+    bar/composition panels 3H, 3I, 3J, 3K, endothelial barplot (source data only).
+    Skips the pseudotime/UMAP/per-gene-grid panels (images, out of scope).
+    """
+    figs = str(base_dir / 'figures')
+    __figure_three_G(adata, save_path=f'{figs}/fig-3G.png', source_data=True)
+    __figure_three_H(adata, save_path=f'{figs}/fig-3H.png', source_data=True)
+    __figure_three_I(adata, save_path=f'{figs}/fig-3I.png', source_data=True)
+    __figure_three_J(adata, save_path=f'{figs}/fig-3J.png', source_data=True)
+    __figure_three_K(adata, save_path=f'{figs}/fig-3K.png', source_data=True)
+    __figure_three_L(adata, save_path=f'{figs}/fig-3L.png', source_data=True)
+    __figure_three_G_endothelial(adata, save_path=f'{figs}/fig-3G_endothelial.png', source_data=True)
+    __figure_three_endothelial_barplot(adata, save_path=f'{figs}/fig-3_endothelial_barplot.png', source_data=True)
+    make_supplementary_tables_p1_p3(adata, outdir="figures/")
+    aggregate_to_excel(3)
+
+
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Figure 3 rendering / source-data export")
+    parser.add_argument("--source-data", action="store_true",
+                        help="Export per-panel source-data CSVs + exact p-values for the "
+                             "quantitative graph panels instead of the full figure render.")
+    args = parser.parse_args()
+
     BASE_DIR = Path.cwd()
     adata = sc.read_h5ad(filename=str(BASE_DIR / 'data/processed_data.h5ad'))
+
+    if args.source_data:
+        export_figure_three_source_data(adata, BASE_DIR)
+        raise SystemExit(0)
     # __figure_three_A(adata, save_path=str(BASE_DIR / 'figures/fig-3A.png'))
     # __figure_three_C(adata, save_path=str(BASE_DIR / 'figures/fig-3C.png'))
     # __figure_three_D(adata, save_path=str(BASE_DIR / 'figures/fig-3D.png'))

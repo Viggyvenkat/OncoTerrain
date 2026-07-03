@@ -6,6 +6,8 @@ import random
 from matplotlib.colors import LinearSegmentedColormap
 from pathlib import Path
 
+from source_data_common import panel_csv, aggregate_to_excel
+
 BASE_DIR = Path.cwd()
 
 def __figure_one_D(adata):
@@ -141,6 +143,11 @@ def __figure_one_G(adata):
     supplementary_table_path = BASE_DIR / 'figures/supplementary_table_one.csv'
     pt_frac.to_csv(supplementary_table_path)
 
+    # Source data for panel 1G (stacked composition barplot): cell-type fraction per tumor stage.
+    # Also emit the raw cell counts so the denominators are traceable.
+    panel_csv(1, '1G_celltype_fractions_by_stage', pt_frac.reset_index(), index=False)
+    panel_csv(1, '1G_celltype_counts_by_stage', pt.reset_index(), index=False)
+
     celltype_colors = adata.uns[f"{celltype_col}_colors"] 
     celltype_categories = adata.obs[celltype_col].cat.categories
     pt_frac = pt_frac.reindex(columns=celltype_categories)
@@ -172,6 +179,16 @@ def __figure_one_G(adata):
     plt.show()
 
 if __name__ == "__main__":
+    import argparse
+    import logging
+
+    parser = argparse.ArgumentParser(description="Figure 1 rendering / source-data export")
+    parser.add_argument("--source-data", action="store_true",
+                        help="Export panel 1G source-data CSVs (the only quantitative graph in Fig 1). "
+                             "UMAP panels 1D/1E/1F are images (out of scope).")
+    args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     adata = sc.read_h5ad(filename=str(BASE_DIR /'data/processed_data.h5ad'))
 
@@ -185,8 +202,13 @@ if __name__ == "__main__":
 
     adata.obs['disease'] = adata.obs['disease'].replace(rename_dict)
 
-    __figure_one_D(adata)
-    __figure_one_E(adata)
-    __figure_one_F(adata)
-    __figure_one_G(adata)
+    if args.source_data:
+        # Fig 1 has no statistical tests; only the 1G composition barplot has source data.
+        __figure_one_G(adata)
+        aggregate_to_excel(1)
+    else:
+        __figure_one_D(adata)
+        __figure_one_E(adata)
+        __figure_one_F(adata)
+        __figure_one_G(adata)
 

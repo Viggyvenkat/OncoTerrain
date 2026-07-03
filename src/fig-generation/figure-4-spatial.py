@@ -14,6 +14,8 @@ from itertools import combinations
 import seaborn as sns
 import squidpy as sq
 
+from source_data_common import panel_csv, write_pvalues, aggregate_to_excel
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -210,6 +212,8 @@ def calculate_spatial_correlations(adatas, gene_sets, output_dir):
                         "anchor_gene": anchor_gene,
                         "target_gene": target_gene,
                         "correlation": corr,
+                        "pearson_pvalue": pval,
+                        "n_spots": int(anchor_expr.shape[0]),
                     }
                 )
 
@@ -421,14 +425,46 @@ def compute_figure_four_G_significance(results_df, output_dir, alpha=0.05):
 
     return out
 
+def export_figure_four_spatial_source_data(correlation_results):
+    """Route the correlation table + cancer-vs-non-cancer Mann-Whitney into source-data/figure_4/."""
+    # Per-sample anchor-target correlations = the source data behind the Fig 4 correlation violins.
+    panel_csv(4, '4G_spatial_anchor_correlations', correlation_results)
+
+    sig = compute_figure_four_G_significance(correlation_results, "figures/spatial_correlations")
+    rows = []
+    for _, r in sig.iterrows():
+        m_c, m_n = r['median_cancer'], r['median_non_cancer']
+        higher = ('cancer' if m_c > m_n else 'non-cancer' if m_n > m_c else 'tie') \
+            if pd.notna(m_c) and pd.notna(m_n) else None
+        rows.append({
+            'panel': f"4G_{r['gene_set']}",
+            'feature': f"{r['anchor_gene']}-{r['target_gene']}",
+            'group1': 'cancer', 'group2': 'non-cancer',
+            'n1': r['n_cancer'], 'n2': r['n_non_cancer'],
+            'median1': m_c, 'median2': m_n, 'higher_median_group': higher,
+            'U_statistic': r['U_statistic'],
+            'p_value_raw': r['p_value'], 'p_value_adj': r['p_value_fdr'],
+            'correction_method': 'fdr_bh',
+        })
+    write_pvalues(4, rows)
+    aggregate_to_excel(4)
+
+
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Figure 4 spatial rendering / source-data export")
+    parser.add_argument("--source-data", action="store_true",
+                        help="Export the spatial correlation source table + cancer-vs-non-cancer "
+                             "Mann-Whitney p-values (skips the spatial image panels).")
+    args = parser.parse_args()
+
     logger.debug("Starting spatial analytics with disease status annotation.")
     root_dir = "data/spatial-data/Zuanietal"
     rename_spatial_files(root_dir)
     adatas = load_and_preprocess_spatial_data("data/spatial-data")
-    
+
     print_sample_metadata(adatas)
-    
+
     gene_sets = [
         ["MIF", "CD74", "CXCR4"],
         ["MIF", "CD74", "CD44"],
@@ -441,10 +477,13 @@ if __name__ == "__main__":
         ["LAMC1", "ITGA3"],
         ["CD6","ALCAM"]
     ]
-    
+
     correlation_results = calculate_spatial_correlations(adatas, gene_sets, "figures/spatial_correlations")
-        
-    plot_spatial_gene_sets(adatas, img=False, output_dir="figures/spatial_gene_sets")
+
+    if args.source_data:
+        export_figure_four_spatial_source_data(correlation_results)
+    else:
+        plot_spatial_gene_sets(adatas, img=False, output_dir="figures/spatial_gene_sets")
     logger.debug("Pipeline completed.")
 
     sig_df = compute_figure_four_G_significance(correlation_results, output_dir="figures", alpha=0.05)

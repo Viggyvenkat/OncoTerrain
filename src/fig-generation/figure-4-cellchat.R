@@ -71,6 +71,32 @@ adv_cc <- prep_for_dot(adv_cc)
   keep
 }
 
+# --- Source-data export (Communications Biology): ligand-receptor interaction tables ---
+# The dot plots encode CellChat's communication probability (colour) and permutation
+# p-value (size). subsetCommunication() returns exactly those numbers, so we export the
+# same source <-> target L-R table that each bubble plot is drawn from.
+EXPORT_SOURCE_DATA <- any(commandArgs(trailingOnly = TRUE) == "--source-data")
+SRC_DATA_DIR <- file.path("src", "fig-generation", "source-data", "figure_4")
+if (EXPORT_SOURCE_DATA) dir.create(SRC_DATA_DIR, recursive = TRUE, showWarnings = FALSE)
+
+export_lr_table <- function(cc_obj, cond_name, compartment, sources.use, targets.use, thresh) {
+  # thresh matches the plotted netVisual_bubble cutoff, so exported rows == plotted dots.
+  df <- subsetCommunication(cc_obj, sources.use = sources.use,
+                            targets.use = targets.use, thresh = thresh)
+  if (is.null(df) || nrow(df) == 0) {
+    message(sprintf("[%s/%s] No L-R interactions at thresh=%.3g to export.",
+                    cond_name, compartment, thresh))
+    return(invisible(NULL))
+  }
+  df$thresh_used <- thresh
+  out <- file.path(SRC_DATA_DIR,
+                   sprintf("figure_4_cellchat_%s_%s_to_epithelium_source_data.csv",
+                           cond_name, compartment))
+  write.csv(df, out, row.names = FALSE)
+  message(sprintf("Wrote %s (%d interactions)", out, nrow(df)))
+  invisible(df)
+}
+
 make_dotplots <- function(cc_obj, cond_name,
                           myeloid = myeloid_cells,
                           lymphoid = lymphoid_cells,
@@ -93,6 +119,7 @@ make_dotplots <- function(cc_obj, cond_name,
   }
 
   if (length(src_my) > 0) {
+    if (EXPORT_SOURCE_DATA) export_lr_table(cc_obj, cond_name, "myeloid", src_my, tgt_ep, thresh_me)
     pdf(file = sprintf("%s_dot_myeloid_to_epithelium.pdf", cond_name),
         width = base_width, height = base_height)
     print(
@@ -113,6 +140,7 @@ make_dotplots <- function(cc_obj, cond_name,
   }
 
   if (length(src_ly) > 0) {
+    if (EXPORT_SOURCE_DATA) export_lr_table(cc_obj, cond_name, "lymphoid", src_ly, tgt_ep, thresh_me)
     pdf(file = sprintf("%s_dot_lymphoid_to_epithelium.pdf", cond_name),
         width = base_width, height = base_height)
     print(
@@ -133,6 +161,7 @@ make_dotplots <- function(cc_obj, cond_name,
   }
 
   if (length(src_fb) > 0) {
+    if (EXPORT_SOURCE_DATA) export_lr_table(cc_obj, cond_name, "fibroblast", src_fb, tgt_ep, thresh_fe)
     pdf(file = sprintf("%s_dot_fibroblast_to_epithelium.pdf", cond_name),
         width = base_width, height = 20)
     print(

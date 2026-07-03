@@ -18,7 +18,9 @@ from sklearn.metrics import classification_report
 
 # allow local package
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 from OncoTerrain.OncoTerrain import OncoTerrain
+from source_data_common import panel_csv, aggregate_to_excel
 
 # ----------------------------- #
 # Constants
@@ -295,6 +297,8 @@ def __violin_plot_5D(adata: sc.AnnData = None, onco_adata: sc.AnnData = None, BA
 
     # Build tidy DF (malignant fraction) + plots
     df = _make_violin_data(adata, onco_adata, CAT_GROUPS, celltype_col=None)
+    # Source data for panel 5D: per (CAT, donor) malignant fraction (raw + the plotted [-1,1] scaled value).
+    panel_csv(5, '5D_malignant_fraction_by_cat', df)
     outdir = BASE_DIR / "figures/violin_5D"
     _plot_violin_with_overlay(df, outdir)
     return df
@@ -573,19 +577,28 @@ def save_processed_by_stage(adata: sc.AnnData, outdir: Path) -> dict:
 
 
 if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser(description="Figure 5D violin / counts-regressor")
+    parser.add_argument("--source-data", action="store_true",
+                        help="Export the 5D violin source data (per-CAT malignant fraction) "
+                             "instead of training the counts regressor.")
+    args = parser.parse_args()
+
     BASE_DIR = Path.cwd()
     onco_adata = sc.read_h5ad(BASE_DIR / "figures/all_oncoterrain/OncoTerrain_annotated.h5ad")
 
-    # __violin_plot_5D(adata=onco_adata, onco_adata=onco_adata, BASE_DIR=BASE_DIR)
+    if args.source_data:
+        __violin_plot_5D(adata=onco_adata, onco_adata=onco_adata, BASE_DIR=BASE_DIR)
+        aggregate_to_excel(5)
+    else:
+        # Train model directly from the same annotated object
+        out = train_oncoterrain_counts_regressor(
+            adata=onco_adata,
+            outdir=BASE_DIR / "models/oncoterrain_counts_reg",
+            test_size=0.2,
+            random_state=42
+        )
+        print(out)
 
-    # Train model directly from the same annotated object
-    out = train_oncoterrain_counts_regressor(
-        adata=onco_adata,
-        outdir=BASE_DIR / "models/oncoterrain_counts_reg",
-        test_size=0.2,
-        random_state=42
-    )
-    print(out)
-
-    # written = save_processed_by_stage(onco_adata, BASE_DIR / "data")
-    # print("Processed subsets written:", written)
+        # written = save_processed_by_stage(onco_adata, BASE_DIR / "data")
+        # print("Processed subsets written:", written)

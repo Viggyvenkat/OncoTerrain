@@ -25,7 +25,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 from OncoTerrain.OncoTerrain import OncoTerrain
+from source_data_common import panel_csv, write_pvalues, aggregate_to_excel
 
 np.random.seed(42)
 logging.basicConfig(level=logging.INFO)
@@ -381,7 +383,8 @@ def __figure_five_D(adata, save_path):
 
 def figure_five_E(meta_data, save_path, stage=2, stage_column='tumor_stage',
                   groupby_column='project', scale_range=(0, 100),
-                  stage_label=None, single_sample=False, sample_id=None):
+                  stage_label=None, single_sample=False, sample_id=None,
+                  source_data=False):
     md = meta_data.copy()
 
     rename_map = {}
@@ -468,6 +471,7 @@ def figure_five_E(meta_data, save_path, stage=2, stage_column='tumor_stage',
     VALUES = expanded_data["mean_score"].values.astype(float)
     LABELS = expanded_data['hallmark'].values
     GROUP = expanded_data["Condition"].values
+    VALUES_raw = VALUES.copy()  # pseudobulk means before the plot's MinMax rescale
 
     PAD = 3
     GROUPS_SIZE = [len(i[1]) for i in expanded_data.groupby("Condition")]
@@ -488,6 +492,17 @@ def figure_five_E(meta_data, save_path, stage=2, stage_column='tumor_stage',
         VALUES = np.full_like(VALUES, (scale_range[0] + scale_range[1]) / 2.0, dtype=float)
     else:
         VALUES = scaler.fit_transform(VALUES.reshape(-1, 1)).flatten()
+
+    if source_data:
+        stage_name = stage_label or ("single_sample" if single_sample else f"stage_{stage}")
+        src_df = pd.DataFrame({
+            'stage': stage_name,
+            'pathway': LABELS,
+            'condition': GROUP,
+            'mean_score_pseudobulk': VALUES_raw,
+            'plotted_bar_height_scaled': VALUES,
+        })
+        panel_csv(5, f'5E_pathway_activity_{stage_name}', src_df)
 
     cmap = plt.get_cmap("tab20", 50)
     unique_labels = np.unique(LABELS)
@@ -645,7 +660,7 @@ def __figure_five_H():
             )
             logging.info(f"OncoTerrain {dir.name} processing completed successfully.")
 
-def __figure_five_F(save_path, mice_data: pd.DataFrame):
+def __figure_five_F(save_path, mice_data: pd.DataFrame, source_data=False):
     BASE_DIR = Path.cwd()
     save_path = Path(save_path)
     save_path.mkdir(parents=True, exist_ok=True)
@@ -820,6 +835,21 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
         diffs_pear['Pre-malignant'].append(p_pre - p_norm)
         diffs_pear['Tumor-like'].append(p_tum - p_norm)
 
+    if source_data:
+        rows = []
+        for i, cond in enumerate(selected_conditions):
+            for cls in ('Pre-malignant', 'Tumor-like'):
+                rows.append({
+                    'mice_condition': cond,
+                    'oncoterrain_class': cls,
+                    'delta_cosine_vs_normal_like': diffs_cos[cls][i],
+                    'delta_pearson_vs_normal_like': diffs_pear[cls][i],
+                })
+        panel_csv(5, '5F_similarity_delta_vs_normal_like', pd.DataFrame(rows))
+        # Full per-sample similarities (behind the deltas) + the heatmap matrix.
+        panel_csv(5, '5F_detailed_similarities', results_df)
+        panel_csv(5, '5F_cosine_similarity_matrix', summary_df.reset_index())
+
     fig, ax = plt.subplots(figsize=(8,6))
     ax.bar(x - width/2, diffs_pear['Pre-malignant'], width,
            label='Pre-malignant vs Normal-like',
@@ -859,7 +889,14 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame):
     
     return results_df, summary_df
 
-if __name__ == '__main__':    
+if __name__ == '__main__':
+    import argparse
+    _parser = argparse.ArgumentParser(description="Figure 5 rendering / source-data export")
+    _parser.add_argument("--source-data", action="store_true",
+                         help="Export source-data CSVs + exact p-values for the Fig 5 graph panels "
+                              "(5B stage Mann-Whitney, 5E polar bars, 5F similarity deltas).")
+    _args = _parser.parse_args()
+
     BASE_DIR = Path.cwd()
     data_path = BASE_DIR / 'data/processed_data.h5ad'
     logging.info(f"Reading data from {data_path}")
@@ -919,21 +956,57 @@ if __name__ == '__main__':
         2: "Advanced"
     }
 
-    for stage_key, stage_label in stages_to_plot.items():
-        fig5E_path = BASE_DIR / f'figures/fig-5E-{stage_label}.png'
-        logging.info(f"Generating figure 5E for {stage_label}.")
-        figure_five_E(
+    if _args.source_data:
+        # ---- 5B: stage-wise Mann-Whitney U (+ BH-FDR) across all features, with medians ----
+        stage_names = {0: "Non-Cancer", 1: "Early", 2: "Advanced"}
+        stats = mannwhitney_by_stage_all_columns(
             updated_meta_data,
-            save_path=str(fig5E_path),
-            stage=stage_key,        
-            stage_column='tumor_stage',
-            stage_label=stage_label
+            stage_key="tumor_stage",
+            stage_order=(0, 1, 2),
+            exclude_cols=("project", "leiden_res_20.00_celltype"),
+            output_csv="figures/supplementary_table_three.csv",
         )
-    
-    logging.info("Training model.")
-    model = __train_model(updated_meta_data)
-    
-    # __figure_five_H()
-    # __figure_five_F(save_path=BASE_DIR / 'figures/fig-5F', mice_data = pd.read_csv(BASE_DIR / 'data/averaged_gene_expression_nature_mice_supp_1.csv'))
+        stats = stats.copy()
+        stats["group1"] = stats["group1"].map(stage_names).fillna(stats["group1"])
+        stats["group2"] = stats["group2"].map(stage_names).fillna(stats["group2"])
+        panel_csv(5, '5B_stage_mannwhitney_pvalues', stats)
+
+        # ---- 5E: polar bar heights per stage ----
+        for stage_key, stage_label in stages_to_plot.items():
+            figure_five_E(
+                updated_meta_data,
+                save_path=str(BASE_DIR / f'figures/fig-5E-{stage_label}.png'),
+                stage=stage_key, stage_column='tumor_stage', stage_label=stage_label,
+                source_data=True,
+            )
+
+        # ---- 5F: cosine/Pearson similarity deltas (needs prior OncoTerrain inference + mouse ref) ----
+        mice_csv = BASE_DIR / 'data/averaged_gene_expression_nature_mice_supp_1.csv'
+        onco_ready = list((BASE_DIR / 'figures').glob('*_oncoterrain/OncoTerrain_annotated.h5ad'))
+        if mice_csv.exists() and onco_ready:
+            __figure_five_F(save_path=BASE_DIR / 'figures/fig-5F',
+                            mice_data=pd.read_csv(mice_csv), source_data=True)
+        else:
+            logging.warning("Skipping 5F source data: need %s and figures/*_oncoterrain/ "
+                            "(run the 5F/5H inference first).", mice_csv.name)
+
+        aggregate_to_excel(5)
+    else:
+        for stage_key, stage_label in stages_to_plot.items():
+            fig5E_path = BASE_DIR / f'figures/fig-5E-{stage_label}.png'
+            logging.info(f"Generating figure 5E for {stage_label}.")
+            figure_five_E(
+                updated_meta_data,
+                save_path=str(fig5E_path),
+                stage=stage_key,
+                stage_column='tumor_stage',
+                stage_label=stage_label
+            )
+
+        logging.info("Training model.")
+        model = __train_model(updated_meta_data)
+
+        # __figure_five_H()
+        # __figure_five_F(save_path=BASE_DIR / 'figures/fig-5F', mice_data = pd.read_csv(BASE_DIR / 'data/averaged_gene_expression_nature_mice_supp_1.csv'))
 
     # logging.info("Script finished successfully.")
