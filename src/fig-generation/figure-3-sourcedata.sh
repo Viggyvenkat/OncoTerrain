@@ -10,17 +10,23 @@
 #SBATCH --output=slurm.%N.%j.out
 #SBATCH --error=slurm.%N.%j.err
 
-# Submit from the repo root:  sbatch src/fig-generation/figure-3-sourcedata.sh
-cd "${SLURM_SUBMIT_DIR:-$(pwd)}" || exit 1
+set -euo pipefail
 
-source /cache/home/vvv11/miniforge3/etc/profile.d/conda.sh
-set +u
-conda activate revision
-set -u
+cd /Users/vigneshvenkat/Desktop/SJDLab/OncoTerrain || exit 1
+mkdir -p .cache/matplotlib .cache/numba
+export MPLCONFIGDIR="/Users/vigneshvenkat/Desktop/SJDLab/OncoTerrain/.cache/matplotlib"
+export NUMBA_CACHE_DIR="/Users/vigneshvenkat/Desktop/SJDLab/OncoTerrain/.cache/numba"
+
+if [ -f /cache/home/vvv11/miniforge3/etc/profile.d/conda.sh ]; then
+    source /cache/home/vvv11/miniforge3/etc/profile.d/conda.sh
+    set +u
+    conda activate revision
+    set -u
+fi
 
 # Figure 3: box/violin panels 3G, 3G-endothelial, 3L (Mann-Whitney U -> exact p-values with
 # medians/direction) and bar/composition panels 3H, 3I, 3J, 3K, endothelial barplot (source data
 # only). Skips the pseudotime/UMAP/per-gene-grid image panels.
-python src/fig-generation/figure-3.py --source-data
+python src/fig-generation/figure-3.py
 
-echo "Figure 3 source data written to src/fig-generation/source-data/figure_3/"
+echo "Figure 3 render complete; source data written to src/fig-generation/source-data/figure_3/"

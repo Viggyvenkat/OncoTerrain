@@ -10,16 +10,21 @@
 #SBATCH --output=slurm.%N.%j.out
 #SBATCH --error=slurm.%N.%j.err
 
-# Submit from the repo root:  sbatch src/fig-generation/figure-1-sourcedata.sh
-# (the figure scripts resolve data/ and figures/ relative to the working directory)
-cd "${SLURM_SUBMIT_DIR:-$(pwd)}" || exit 1
+set -euo pipefail
 
-source /cache/home/vvv11/miniforge3/etc/profile.d/conda.sh
-set +u
-conda activate revision
-set -u
+cd /Users/vigneshvenkat/Desktop/SJDLab/OncoTerrain || exit 1
+mkdir -p .cache/matplotlib .cache/numba
+export MPLCONFIGDIR="/Users/vigneshvenkat/Desktop/SJDLab/OncoTerrain/.cache/matplotlib"
+export NUMBA_CACHE_DIR="/Users/vigneshvenkat/Desktop/SJDLab/OncoTerrain/.cache/numba"
 
-# Figure 1: only panel 1G (cell-type composition barplot) has source data; no statistical tests.
-python src/fig-generation/figure-1.py --source-data
+if [ -f /cache/home/vvv11/miniforge3/etc/profile.d/conda.sh ]; then
+    source /cache/home/vvv11/miniforge3/etc/profile.d/conda.sh
+    set +u
+    conda activate revision
+    set -u
+fi
 
-echo "Figure 1 source data written to src/fig-generation/source-data/figure_1/"
+# Figure 1: full figure render; panel 1G also writes source data.
+python src/fig-generation/figure-1.py
+
+echo "Figure 1 render complete; source data written to src/fig-generation/source-data/figure_1/"

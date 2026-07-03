@@ -577,28 +577,21 @@ def save_processed_by_stage(adata: sc.AnnData, outdir: Path) -> dict:
 
 
 if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser(description="Figure 5D violin / counts-regressor")
-    parser.add_argument("--source-data", action="store_true",
-                        help="Export the 5D violin source data (per-CAT malignant fraction) "
-                             "instead of training the counts regressor.")
-    args = parser.parse_args()
-
     BASE_DIR = Path.cwd()
     onco_adata = sc.read_h5ad(BASE_DIR / "figures/all_oncoterrain/OncoTerrain_annotated.h5ad")
 
-    if args.source_data:
-        __violin_plot_5D(adata=onco_adata, onco_adata=onco_adata, BASE_DIR=BASE_DIR)
-        aggregate_to_excel(5)
-    else:
-        # Train model directly from the same annotated object
-        out = train_oncoterrain_counts_regressor(
-            adata=onco_adata,
-            outdir=BASE_DIR / "models/oncoterrain_counts_reg",
-            test_size=0.2,
-            random_state=42
-        )
-        print(out)
+    # Panel 5D violin: builds the tidy per-CAT malignant-fraction table (its source data) and plots.
+    __violin_plot_5D(adata=onco_adata, onco_adata=onco_adata, BASE_DIR=BASE_DIR)
+    aggregate_to_excel(5)
 
-        # written = save_processed_by_stage(onco_adata, BASE_DIR / "data")
-        # print("Processed subsets written:", written)
+    # Counts regressor (not a figure panel); uncomment to retrain.
+    # out = train_oncoterrain_counts_regressor(
+    #     adata=onco_adata,
+    #     outdir=BASE_DIR / "models/oncoterrain_counts_reg",
+    #     test_size=0.2,
+    #     random_state=42
+    # )
+    # print(out)
+
+    # written = save_processed_by_stage(onco_adata, BASE_DIR / "data")
+    # print("Processed subsets written:", written)

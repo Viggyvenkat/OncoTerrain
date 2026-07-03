@@ -9,9 +9,8 @@ library(ggplot2)
 baseDataPath <- "./data/scRNAseq-data/PCLAcohort"
 
 # --- Source-data export (Communications Biology): CopyKAT aneuploid/diploid proportions ---
-EXPORT_SOURCE_DATA <- any(commandArgs(trailingOnly = TRUE) == "--source-data")
 SRC_DATA_DIR <- file.path("src", "fig-generation", "source-data", "figure_5")
-if (EXPORT_SOURCE_DATA) dir.create(SRC_DATA_DIR, recursive = TRUE, showWarnings = FALSE)
+dir.create(SRC_DATA_DIR, recursive = TRUE, showWarnings = FALSE)
 
 if (!dir.exists("figures")) {
   dir.create("figures", recursive = TRUE)
@@ -171,18 +170,16 @@ for (sampleName in sampleFolders) {
       cat(paste0(i, ": ", percentages[i], "%\n"))
     }
 
-    if (EXPORT_SOURCE_DATA) {
-      class_df <- data.frame(
-        sample = sampleName,
-        copykat_prediction = names(classification_table),
-        n_cells = as.integer(classification_table),
-        percent = as.numeric(100 * classification_table / total_cells)
-      )
-      out <- file.path(SRC_DATA_DIR,
-                       paste0("figure_5_copykat_", sampleName, "_classification_source_data.csv"))
-      write.csv(class_df, out, row.names = FALSE)
-      cat(sprintf("Wrote %s\n", out))
-    }
+    class_df <- data.frame(
+      sample = sampleName,
+      copykat_prediction = names(classification_table),
+      n_cells = as.integer(classification_table),
+      percent = as.numeric(100 * classification_table / total_cells)
+    )
+    out <- file.path(SRC_DATA_DIR,
+                     paste0("figure_5_copykat_", sampleName, "_classification_source_data.csv"))
+    write.csv(class_df, out, row.names = FALSE)
+    cat(sprintf("Wrote %s\n", out))
 
     cat("\nCopyKAT predictions by Seurat cluster:\n")
     print(table(raw$seurat_clusters, raw$copykat_pred))

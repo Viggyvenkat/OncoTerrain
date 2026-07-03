@@ -774,7 +774,7 @@ def __figure_three_F_3(adata, save_dir=None):
         plt.close(fig)
 
 
-def __figure_three_G(adata, save_path=None, source_data=False):
+def __figure_three_G(adata, save_path=None, source_data=True):
     # Filter for T cells
     t_cells = adata[
         adata.obs['leiden_res_20.00_celltype']
@@ -866,7 +866,7 @@ def __figure_three_G(adata, save_path=None, source_data=False):
     else:
         plt.show()
 
-def __figure_three_H(adata, save_path = None, source_data=False):
+def __figure_three_H(adata, save_path = None, source_data=True):
     fibroblast_cells = adata[
         adata.obs['leiden_res_20.00_celltype']
         .isin([
@@ -946,7 +946,7 @@ def __figure_three_H(adata, save_path = None, source_data=False):
     else:
         plt.show()
 
-def __figure_three_I(adata, save_path=None, source_data=False):
+def __figure_three_I(adata, save_path=None, source_data=True):
     t_cells = adata[
         adata.obs['leiden_res_20.00_celltype']
         .isin(['CD8 T cells', 'CD4 T cells', 'T cells proliferating'])
@@ -1055,7 +1055,7 @@ def __figure_three_I(adata, save_path=None, source_data=False):
     else:
         plt.show()
 
-def __figure_three_J(adata, save_path=None, source_data=False):
+def __figure_three_J(adata, save_path=None, source_data=True):
 
     myeloid = adata[
         adata.obs['leiden_res_20.00_celltype']
@@ -1159,7 +1159,7 @@ def __figure_three_J(adata, save_path=None, source_data=False):
     else:
         plt.show()
 
-def __figure_three_K(adata, save_path=None, source_data=False):
+def __figure_three_K(adata, save_path=None, source_data=True):
     fibro = adata[
         adata.obs['leiden_res_20.00_celltype']
         .isin([
@@ -1256,7 +1256,7 @@ def __figure_three_K(adata, save_path=None, source_data=False):
     else:
         plt.show()
 
-def __figure_three_L(adata, save_path=None, source_data=False):
+def __figure_three_L(adata, save_path=None, source_data=True):
     kras_mean = adata.obs["HALLMARK_KRAS_SIGNALING_UP"].mean()
     egfr_mean = adata.obs["REACTOME_SIGNALING_BY_EGFR_IN_CANCER"].mean()
     adata.obs["KRAS_high"] = adata.obs["HALLMARK_KRAS_SIGNALING_UP"] > kras_mean
@@ -1672,7 +1672,7 @@ def __figure_three_state_change(adata, save_dir=None):
 
     print(f"Saved Figure 3B to:\n  - {png_path}\n  - {pdf_path}")
 
-def __figure_three_endothelial_barplot(adata, save_path=None, source_data=False):
+def __figure_three_endothelial_barplot(adata, save_path=None, source_data=True):
     """
     Stacked barplot of endothelial 'phenotypes' by tumor stage based on
     PLVAP / FLT1 / KDR expression above/below median within endothelial cells.
@@ -1961,7 +1961,7 @@ def __figure_three_C_endothelial(adata, save_path=None):
 
     return ec_cells
 
-def __figure_three_G_endothelial(adata, save_path=None, source_data=False):
+def __figure_three_G_endothelial(adata, save_path=None, source_data=True):
     """
     Boxplots of HALLMARK_ANGIOGENESIS by tumor stage for endothelial cells,
     with pairwise Mann–Whitney U tests (Bonferroni-corrected).
@@ -2195,19 +2195,12 @@ def export_figure_three_source_data(adata, base_dir):
 
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser(description="Figure 3 rendering / source-data export")
-    parser.add_argument("--source-data", action="store_true",
-                        help="Export per-panel source-data CSVs + exact p-values for the "
-                             "quantitative graph panels instead of the full figure render.")
-    args = parser.parse_args()
-
     BASE_DIR = Path.cwd()
     adata = sc.read_h5ad(filename=str(BASE_DIR / 'data/processed_data.h5ad'))
 
-    if args.source_data:
-        export_figure_three_source_data(adata, BASE_DIR)
-        raise SystemExit(0)
+    # Pseudotime / marker-grid render panels (images, no source data); need py-monocle.
+    __figure_three_C_endothelial(adata, save_path=str(BASE_DIR / 'figures/fig-3C_endothelial.png'))
+    __figure_three_F_endothelial(adata, save_dir=str(BASE_DIR / 'figures/fig-3F_endothelial'))
     # __figure_three_A(adata, save_path=str(BASE_DIR / 'figures/fig-3A.png'))
     # __figure_three_C(adata, save_path=str(BASE_DIR / 'figures/fig-3C.png'))
     # __figure_three_D(adata, save_path=str(BASE_DIR / 'figures/fig-3D.png'))
@@ -2215,16 +2208,8 @@ if __name__ == "__main__":
     # __figure_three_F_1(adata, save_dir=str(BASE_DIR / 'figures/fig-3F1'))
     # __figure_three_F_2(adata, save_dir=str(BASE_DIR / 'figures/fig-3F2'))
     # __figure_three_F_3(adata, save_dir=str(BASE_DIR / 'figures/fig-3F3'))
-    # __figure_three_G(adata, save_path=str(BASE_DIR / 'figures/fig-3G.png'))
-    # __figure_three_H(adata, save_path=str(BASE_DIR / 'figures/fig-3H.png'))
-    # __figure_three_I(adata, save_path=str(BASE_DIR / 'figures/fig-3I.png'))
-    # __figure_three_J(adata, save_path=str(BASE_DIR / 'figures/fig-3J.png'))
-    # __figure_three_K(adata, save_path=str(BASE_DIR / 'figures/fig-3K.png'))
-    # __figure_three_L(adata, save_path=str(BASE_DIR / 'figures/fig-3L.png'))
     # __figure_three_state_change(adata, save_dir=str(BASE_DIR / 'figures/fig-3_state_change'))
-    __figure_three_C_endothelial(adata, save_path=str(BASE_DIR / 'figures/fig-3C_endothelial.png'))
-    __figure_three_G_endothelial(adata, save_path=str(BASE_DIR / 'figures/fig-3G_endothelial.png'))
-    __figure_three_endothelial_barplot(adata, save_path=str(BASE_DIR / 'figures/fig-3_endothelial_barplot.png'))
-    __figure_three_F_endothelial(adata, save_dir=str(BASE_DIR / 'figures/fig-3F_endothelial'))
 
-    make_supplementary_tables_p1_p3(adata, outdir="figures/")
+    # Quantitative panels (3G, 3H, 3I, 3J, 3K, 3L, 3G-endo, endo barplot): render + write source
+    # data + exact p-values + phenotype tables, then bundle Figure_3_source_data.xlsx.
+    export_figure_three_source_data(adata, BASE_DIR)

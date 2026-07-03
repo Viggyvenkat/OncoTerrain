@@ -17,6 +17,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 import logging
 from pytorch_tabnet.tab_model import TabNetClassifier
 import scanpy as sc
+import umap
+import scprep
 import joblib
 import logging
 import matplotlib.colors as mcolors
@@ -384,7 +386,7 @@ def __figure_five_D(adata, save_path):
 def figure_five_E(meta_data, save_path, stage=2, stage_column='tumor_stage',
                   groupby_column='project', scale_range=(0, 100),
                   stage_label=None, single_sample=False, sample_id=None,
-                  source_data=False):
+                  source_data=True):
     md = meta_data.copy()
 
     rename_map = {}
@@ -660,7 +662,7 @@ def __figure_five_H():
             )
             logging.info(f"OncoTerrain {dir.name} processing completed successfully.")
 
-def __figure_five_F(save_path, mice_data: pd.DataFrame, source_data=False):
+def __figure_five_F(save_path, mice_data: pd.DataFrame, source_data=True):
     BASE_DIR = Path.cwd()
     save_path = Path(save_path)
     save_path.mkdir(parents=True, exist_ok=True)
@@ -890,13 +892,6 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame, source_data=False):
     return results_df, summary_df
 
 if __name__ == '__main__':
-    import argparse
-    _parser = argparse.ArgumentParser(description="Figure 5 rendering / source-data export")
-    _parser.add_argument("--source-data", action="store_true",
-                         help="Export source-data CSVs + exact p-values for the Fig 5 graph panels "
-                              "(5B stage Mann-Whitney, 5E polar bars, 5F similarity deltas).")
-    _args = _parser.parse_args()
-
     BASE_DIR = Path.cwd()
     data_path = BASE_DIR / 'data/processed_data.h5ad'
     logging.info(f"Reading data from {data_path}")
@@ -913,100 +908,71 @@ if __name__ == '__main__':
 
     updated_meta_data, _, _ = __feature_analysis_w_preprocessing(meta_data)
     
-    # numeric_cols_main = updated_meta_data.select_dtypes(include=[np.number]).columns
-    # NON_FEATURES = {'tumor_stage', 'project', 'leiden_res_20.00_celltype', 'leiden_res_0.50', 'leiden_res_2.00'}
-    # feature_cols = [c for c in numeric_cols_main if c not in NON_FEATURES]
-    # hallmark_list = [c for c in feature_cols if c in CONDITIONS.keys()]
-    # logging.info(f"Identified hallmark features: {list(hallmark_list)}")
+    numeric_cols_main = updated_meta_data.select_dtypes(include=[np.number]).columns
+    NON_FEATURES = {'tumor_stage', 'project', 'leiden_res_20.00_celltype', 'leiden_res_0.50', 'leiden_res_2.00'}
+    feature_cols = [c for c in numeric_cols_main if c not in NON_FEATURES]
+    hallmark_list = [c for c in feature_cols if c in CONDITIONS.keys()]
+    logging.info(f"Identified hallmark features: {list(hallmark_list)}")
     
-    # features = updated_meta_data[feature_cols].to_numpy()
-    # tumor_stage = updated_meta_data['tumor_stage']
+    features = updated_meta_data[feature_cols].to_numpy()
+    tumor_stage = updated_meta_data['tumor_stage']
     
-    # logging.info("Initializing UMAP reducer with parameters: n_neighbors=50, min_dist=0.05, metric='euclidean'")
-    # reducer = umap.UMAP(n_neighbors=50, min_dist=0.05, metric='euclidean', random_state=42)
+    logging.info("Initializing UMAP reducer with parameters: n_neighbors=50, min_dist=0.05, metric='euclidean'")
+    reducer = umap.UMAP(n_neighbors=50, min_dist=0.05, metric='euclidean', random_state=42)
     
-    # logging.info("Fitting UMAP to features and transforming.")
-    # embedding = reducer.fit_transform(features)
-    # logging.info("UMAP embedding shape: %s", embedding.shape)
+    logging.info("Fitting UMAP to features and transforming.")
+    embedding = reducer.fit_transform(features)
+    logging.info("UMAP embedding shape: %s", embedding.shape)
     
-    # fig5B_path = BASE_DIR / 'figures/fig-5B.png'
-    # fig5C_path = BASE_DIR / 'figures/fig-5C'
-    # fig5D_path = BASE_DIR / 'figures/fig-5D.png'
+    fig5B_path = BASE_DIR / 'figures/fig-5B.png'
+    fig5C_path = BASE_DIR / 'figures/fig-5C'
+    fig5D_path = BASE_DIR / 'figures/fig-5D.png'
 
-    # df = mannwhitney_by_stage_all_columns(
-    #     updated_meta_data,
-    #     stage_key="tumor_stage",
-    #     stage_order=(0, 1, 2),  
-    #     exclude_cols=("project", "leiden_res_20.00_celltype"),
-    #     output_csv="figures/supplementary_table_three.csv"
-    # )
-    
-    # logging.info("Generating figure 5B.")
-    # __figure_five_B(updated_meta_data, save_path=str(fig5B_path), embedding=embedding)
-    
-    # logging.info("Generating figure 5C.")
-    # __figure_five_C(updated_meta_data, save_path=str(fig5C_path), embedding=embedding, hallmark_list=hallmark_list)
-    
-    # logging.info("Generating figure 5D.")
-    # __figure_five_D(updated_meta_data, save_path=str(fig5D_path))
+    df = mannwhitney_by_stage_all_columns(
+        updated_meta_data,
+        stage_key="tumor_stage",
+        stage_order=(0, 1, 2),
+        exclude_cols=("project", "leiden_res_20.00_celltype"),
+        output_csv="figures/supplementary_table_three.csv"
+    )
+    # 5B source data: stage-wise Mann-Whitney U (+ BH-FDR) across all features, with medians.
+    stage_names = {0: "Non-Cancer", 1: "Early", 2: "Advanced"}
+    stats = df.copy()
+    stats["group1"] = stats["group1"].map(stage_names).fillna(stats["group1"])
+    stats["group2"] = stats["group2"].map(stage_names).fillna(stats["group2"])
+    panel_csv(5, '5B_stage_mannwhitney_pvalues', stats)
 
-    stages_to_plot = {
-        0: "Non-Cancer",
-        1: "Early",
-        2: "Advanced"
-    }
+    logging.info("Generating figure 5B.")
+    __figure_five_B(updated_meta_data, save_path=str(fig5B_path), embedding=embedding)
 
-    if _args.source_data:
-        # ---- 5B: stage-wise Mann-Whitney U (+ BH-FDR) across all features, with medians ----
-        stage_names = {0: "Non-Cancer", 1: "Early", 2: "Advanced"}
-        stats = mannwhitney_by_stage_all_columns(
+    logging.info("Generating figure 5C.")
+    __figure_five_C(updated_meta_data, save_path=str(fig5C_path), embedding=embedding, hallmark_list=hallmark_list)
+
+    logging.info("Generating figure 5D.")
+    __figure_five_D(updated_meta_data, save_path=str(fig5D_path))
+
+    stages_to_plot = {0: "Non-Cancer", 1: "Early", 2: "Advanced"}
+    for stage_key, stage_label in stages_to_plot.items():
+        logging.info(f"Generating figure 5E for {stage_label}.")
+        figure_five_E(
             updated_meta_data,
-            stage_key="tumor_stage",
-            stage_order=(0, 1, 2),
-            exclude_cols=("project", "leiden_res_20.00_celltype"),
-            output_csv="figures/supplementary_table_three.csv",
+            save_path=str(BASE_DIR / f'figures/fig-5E-{stage_label}.png'),
+            stage=stage_key, stage_column='tumor_stage', stage_label=stage_label,
         )
-        stats = stats.copy()
-        stats["group1"] = stats["group1"].map(stage_names).fillna(stats["group1"])
-        stats["group2"] = stats["group2"].map(stage_names).fillna(stats["group2"])
-        panel_csv(5, '5B_stage_mannwhitney_pvalues', stats)
 
-        # ---- 5E: polar bar heights per stage ----
-        for stage_key, stage_label in stages_to_plot.items():
-            figure_five_E(
-                updated_meta_data,
-                save_path=str(BASE_DIR / f'figures/fig-5E-{stage_label}.png'),
-                stage=stage_key, stage_column='tumor_stage', stage_label=stage_label,
-                source_data=True,
-            )
+    logging.info("Training model.")
+    model = __train_model(updated_meta_data)
 
-        # ---- 5F: cosine/Pearson similarity deltas (needs prior OncoTerrain inference + mouse ref) ----
-        mice_csv = BASE_DIR / 'data/averaged_gene_expression_nature_mice_supp_1.csv'
-        onco_ready = list((BASE_DIR / 'figures').glob('*_oncoterrain/OncoTerrain_annotated.h5ad'))
-        if mice_csv.exists() and onco_ready:
-            __figure_five_F(save_path=BASE_DIR / 'figures/fig-5F',
-                            mice_data=pd.read_csv(mice_csv), source_data=True)
-        else:
-            logging.warning("Skipping 5F source data: need %s and figures/*_oncoterrain/ "
-                            "(run the 5F/5H inference first).", mice_csv.name)
+    # 5H OncoTerrain inference -> writes figures/*_oncoterrain/OncoTerrain_annotated.h5ad
+    __figure_five_H()
 
-        aggregate_to_excel(5)
+    # 5F cosine/Pearson similarity deltas (needs the mouse reference + the 5H inference outputs).
+    mice_csv = BASE_DIR / 'data/averaged_gene_expression_nature_mice_supp_1.csv'
+    onco_ready = list((BASE_DIR / 'figures').glob('*_oncoterrain/OncoTerrain_annotated.h5ad'))
+    if mice_csv.exists() and onco_ready:
+        __figure_five_F(save_path=BASE_DIR / 'figures/fig-5F', mice_data=pd.read_csv(mice_csv))
     else:
-        for stage_key, stage_label in stages_to_plot.items():
-            fig5E_path = BASE_DIR / f'figures/fig-5E-{stage_label}.png'
-            logging.info(f"Generating figure 5E for {stage_label}.")
-            figure_five_E(
-                updated_meta_data,
-                save_path=str(fig5E_path),
-                stage=stage_key,
-                stage_column='tumor_stage',
-                stage_label=stage_label
-            )
+        logging.warning("Skipping 5F: need %s and figures/*_oncoterrain/ outputs.", mice_csv.name)
 
-        logging.info("Training model.")
-        model = __train_model(updated_meta_data)
-
-        # __figure_five_H()
-        # __figure_five_F(save_path=BASE_DIR / 'figures/fig-5F', mice_data = pd.read_csv(BASE_DIR / 'data/averaged_gene_expression_nature_mice_supp_1.csv'))
-
-    # logging.info("Script finished successfully.")
+    aggregate_to_excel(5)
+    logging.info("Script finished successfully.")

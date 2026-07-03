@@ -7,23 +7,33 @@ channels:
 dependencies:
   - python=3.10
   - pip
-  - numpy
+  - numpy<2.0.0            # py-monocle requires numpy<2
   - pandas
   - scipy
   - scikit-learn
+  - statsmodels           # figure-2/3 multipletests
+  - networkx              # py-monocle dep
   - matplotlib
   - seaborn
   - joblib
   - pyyaml
   - h5py
+  - openpyxl              # writing the Figure_N_source_data.xlsx workbooks
   - anndata
   - scanpy
   - leidenalg
   - python-igraph
   - umap-learn
+  - squidpy               # figure-4-spatial + py-monocle dep
   - pytorch::pytorch
   - pytorch::torchvision
   - pytorch::pytorch-cuda=12.1
   - pip:
       - pytorch-tabnet
       - gseapy
+      - scanorama         # imported by figure-4-spatial
+      - scprep            # figure-5 5F normalization
+      # Local editable package (BioTuring py-monocle) used by figure-3 pseudotime panels.
+      # NOTE: run env update from the repo root so this relative path resolves, e.g.:
+      #   mamba env update -f src/revision-analyses/revision.yml --prune -y
+      - -e ./py-monocle

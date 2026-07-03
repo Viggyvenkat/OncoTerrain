@@ -319,7 +319,7 @@ def __figure_two_B_2(adata, save_path=None):
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
     plt.close(fig)
 
-def __figure_two_C(adata, save_path=None, source_data=False):
+def __figure_two_C(adata, save_path=None, source_data=True):
     epi = adata[
         (adata.obs['leiden_res_0.10_celltype'].isin(EPITHELIAL_CATS))
         & (adata.obs['project'].isin(TARGET_PROJECTS))
@@ -483,7 +483,7 @@ def __figure_two_C(adata, save_path=None, source_data=False):
     else:
         plt.show()
 
-def __figure_two_G(adata, save_path=None, source_data=False):
+def __figure_two_G(adata, save_path=None, source_data=True):
     adata = adata[adata.obs['project'].isin(TARGET_PROJECTS)].copy()
 
     kras_mean = adata.obs["HALLMARK_KRAS_SIGNALING_UP"].mean()
@@ -658,27 +658,15 @@ def __figure_two_G(adata, save_path=None, source_data=False):
         plt.show()
 
 if __name__ == "__main__":
-    import argparse
     import logging
-
-    parser = argparse.ArgumentParser(description="Figure 2 rendering / source-data export")
-    parser.add_argument("--source-data", action="store_true",
-                        help="Export per-panel source-data CSVs + exact p-values + split boxplots "
-                             "(2C, 2G) instead of the full figure render.")
-    args = parser.parse_args()
-
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     BASE_DIR = Path.cwd()
     adata = sc.read_h5ad(filename=str(BASE_DIR / 'data/processed_data.h5ad'))
 
-    if args.source_data:
-        # Only the quantitative graph panels (2C, 2G); UMAP panels 2A/2B/2B_2 are images (out of scope).
-        __figure_two_G(adata, save_path=str(BASE_DIR / 'figures/figure_2G.png'), source_data=True)
-        __figure_two_C(adata, save_path=str(BASE_DIR / 'figures/figure_2C.png'), source_data=True)
-        aggregate_to_excel(2)
-    else:
-        __figure_two_A(adata, save_path=str(BASE_DIR / 'figures/figure_2A.png'))
-        __figure_two_B(adata, save_path=str(BASE_DIR / 'figures/figure_2B.png'))
-        __figure_two_B_2(adata, save_path=str(BASE_DIR / 'figures/figure_2B_2.png'))
-        __figure_two_G(adata, save_path=str(BASE_DIR / 'figures/figure_2G.png'))
-        __figure_two_C(adata, save_path=str(BASE_DIR / 'figures/figure_2C.png'))
+    # Panels 2G and 2C write their source data + exact p-values + per-pathway split boxplots.
+    __figure_two_A(adata, save_path=str(BASE_DIR / 'figures/figure_2A.png'))
+    __figure_two_B(adata, save_path=str(BASE_DIR / 'figures/figure_2B.png'))
+    __figure_two_B_2(adata, save_path=str(BASE_DIR / 'figures/figure_2B_2.png'))
+    __figure_two_G(adata, save_path=str(BASE_DIR / 'figures/figure_2G.png'))
+    __figure_two_C(adata, save_path=str(BASE_DIR / 'figures/figure_2C.png'))
+    aggregate_to_excel(2)

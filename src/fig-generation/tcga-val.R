@@ -7,9 +7,8 @@ library(ggplot2)
 library(mixOmics)
 
 # --- Source-data export (Communications Biology) ---
-EXPORT_SOURCE_DATA <- any(commandArgs(trailingOnly = TRUE) == "--source-data")
 SRC_DATA_DIR <- file.path("src", "fig-generation", "source-data", "figure_5")
-if (EXPORT_SOURCE_DATA) dir.create(SRC_DATA_DIR, recursive = TRUE, showWarnings = FALSE)
+dir.create(SRC_DATA_DIR, recursive = TRUE, showWarnings = FALSE)
 
 output_file <- "tcga_sample_gene_matrix.csv"
 
@@ -275,13 +274,11 @@ ggsave(
   dpi = 300
 )
 
-if (EXPORT_SOURCE_DATA) {
-  # PCA scatter source data (PC1/PC2 per sample, coloured by stage)
-  write.csv(pca_df,
-            file.path(SRC_DATA_DIR, "figure_5_tcga_pca_scores_source_data.csv"),
-            row.names = FALSE)
-  message(sprintf("Wrote %s", file.path(SRC_DATA_DIR, "figure_5_tcga_pca_scores_source_data.csv")))
-}
+# PCA scatter source data (PC1/PC2 per sample, coloured by stage)
+write.csv(pca_df,
+          file.path(SRC_DATA_DIR, "figure_5_tcga_pca_scores_source_data.csv"),
+          row.names = FALSE)
+message(sprintf("Wrote %s", file.path(SRC_DATA_DIR, "figure_5_tcga_pca_scores_source_data.csv")))
 
 X <- numeric_data
 Y <- data_filtered$ajcc_pathologic_stage
@@ -289,21 +286,19 @@ Y <- data_filtered$ajcc_pathologic_stage
 plsda_res <- plsda(X, Y, ncomp = 2)
 plotIndiv(plsda_res, comp = c(1, 2), group = Y, legend = TRUE)
 
-if (EXPORT_SOURCE_DATA) {
-  # PLS-DA individual scores (the plotted points) + variable loadings
-  plsda_scores <- as.data.frame(plsda_res$variates$X)
-  colnames(plsda_scores) <- paste0("comp", seq_len(ncol(plsda_scores)))
-  plsda_scores$Sample <- rownames(numeric_data)
-  plsda_scores$ajcc_pathologic_stage <- Y
-  write.csv(plsda_scores,
-            file.path(SRC_DATA_DIR, "figure_5_tcga_plsda_scores_source_data.csv"),
-            row.names = FALSE)
+# PLS-DA individual scores (the plotted points) + variable loadings
+plsda_scores <- as.data.frame(plsda_res$variates$X)
+colnames(plsda_scores) <- paste0("comp", seq_len(ncol(plsda_scores)))
+plsda_scores$Sample <- rownames(numeric_data)
+plsda_scores$ajcc_pathologic_stage <- Y
+write.csv(plsda_scores,
+          file.path(SRC_DATA_DIR, "figure_5_tcga_plsda_scores_source_data.csv"),
+          row.names = FALSE)
 
-  plsda_loadings <- as.data.frame(plsda_res$loadings$X)
-  colnames(plsda_loadings) <- paste0("comp", seq_len(ncol(plsda_loadings)))
-  plsda_loadings$feature <- rownames(plsda_res$loadings$X)
-  write.csv(plsda_loadings,
-            file.path(SRC_DATA_DIR, "figure_5_tcga_plsda_loadings_source_data.csv"),
-            row.names = FALSE)
-  message("Wrote TCGA PLS-DA scores + loadings source data")
-}
+plsda_loadings <- as.data.frame(plsda_res$loadings$X)
+colnames(plsda_loadings) <- paste0("comp", seq_len(ncol(plsda_loadings)))
+plsda_loadings$feature <- rownames(plsda_res$loadings$X)
+write.csv(plsda_loadings,
+          file.path(SRC_DATA_DIR, "figure_5_tcga_plsda_loadings_source_data.csv"),
+          row.names = FALSE)
+message("Wrote TCGA PLS-DA scores + loadings source data")

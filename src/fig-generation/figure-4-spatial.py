@@ -451,13 +451,6 @@ def export_figure_four_spatial_source_data(correlation_results):
 
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser(description="Figure 4 spatial rendering / source-data export")
-    parser.add_argument("--source-data", action="store_true",
-                        help="Export the spatial correlation source table + cancer-vs-non-cancer "
-                             "Mann-Whitney p-values (skips the spatial image panels).")
-    args = parser.parse_args()
-
     logger.debug("Starting spatial analytics with disease status annotation.")
     root_dir = "data/spatial-data/Zuanietal"
     rename_spatial_files(root_dir)
@@ -480,10 +473,10 @@ if __name__ == "__main__":
 
     correlation_results = calculate_spatial_correlations(adatas, gene_sets, "figures/spatial_correlations")
 
-    if args.source_data:
-        export_figure_four_spatial_source_data(correlation_results)
-    else:
-        plot_spatial_gene_sets(adatas, img=False, output_dir="figures/spatial_gene_sets")
+    # Write the correlation source table + cancer-vs-non-cancer Mann-Whitney p-values + workbook.
+    export_figure_four_spatial_source_data(correlation_results)
+    # Spatial gene-expression maps (image panels).
+    plot_spatial_gene_sets(adatas, img=False, output_dir="figures/spatial_gene_sets")
     logger.debug("Pipeline completed.")
 
     sig_df = compute_figure_four_G_significance(correlation_results, output_dir="figures", alpha=0.05)

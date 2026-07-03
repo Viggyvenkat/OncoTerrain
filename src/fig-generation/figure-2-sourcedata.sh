@@ -10,17 +10,23 @@
 #SBATCH --output=slurm.%N.%j.out
 #SBATCH --error=slurm.%N.%j.err
 
-# Submit from the repo root:  sbatch src/fig-generation/figure-2-sourcedata.sh
-cd "${SLURM_SUBMIT_DIR:-$(pwd)}" || exit 1
+set -euo pipefail
 
-source /cache/home/vvv11/miniforge3/etc/profile.d/conda.sh
-set +u
-conda activate revision
-set -u
+cd /Users/vigneshvenkat/Desktop/SJDLab/OncoTerrain || exit 1
+mkdir -p .cache/matplotlib .cache/numba
+export MPLCONFIGDIR="/Users/vigneshvenkat/Desktop/SJDLab/OncoTerrain/.cache/matplotlib"
+export NUMBA_CACHE_DIR="/Users/vigneshvenkat/Desktop/SJDLab/OncoTerrain/.cache/numba"
+
+if [ -f /cache/home/vvv11/miniforge3/etc/profile.d/conda.sh ]; then
+    source /cache/home/vvv11/miniforge3/etc/profile.d/conda.sh
+    set +u
+    conda activate revision
+    set -u
+fi
 
 # Figure 2: panels 2C and 2G. Exports per-cell pathway-score source data, exact pairwise
 # Mann-Whitney U + FDR-BH p-values (with medians/direction), and per-pathway SPLIT boxplots
 # (figure_2C_<Pathway>.png / figure_2G_<Pathway>.png) so each panel shows its own p-values.
-python src/fig-generation/figure-2.py --source-data
+python src/fig-generation/figure-2.py
 
-echo "Figure 2 source data written to src/fig-generation/source-data/figure_2/"
+echo "Figure 2 render complete; source data written to src/fig-generation/source-data/figure_2/"
