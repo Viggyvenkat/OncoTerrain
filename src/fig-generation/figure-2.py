@@ -9,6 +9,91 @@ import itertools
 from scipy.stats import mannwhitneyu
 from statsmodels.stats.multitest import multipletests
 
+from source_data_common import (
+    panel_csv, long_from_group_dict, mwu_with_direction, write_pvalues, aggregate_to_excel,
+)
+
+# Correct pathway display names keyed by the actual score column (fixes the mislabeled
+# x-axis in the legacy grouped 2C plot, where `labels` was out of order vs `cols`).
+PATHWAY_DISPLAY = {
+    'HALLMARK_EPITHELIAL_MESENCHYMAL_TRANSITION': 'EMT',
+    'HALLMARK_APOPTOSIS': 'Apoptosis',
+    'REACTOME_CELL_CYCLE': 'Cell cycle',
+}
+
+
+def _p_text(p):
+    """Exact p-value label for on-plot annotation."""
+    if p is None or not np.isfinite(p):
+        return 'p = n/a'
+    if p < 1e-3:
+        return f'p = {p:.1e}'
+    return f'p = {p:.3f}'
+
+
+def _annotate_pairwise(ax, pos_by_group, data_by_group, pair_pvals):
+    """Draw stacked significance brackets with exact p-values above a single boxplot.
+
+    pair_pvals: list of (group1, group2, p_value) already ordered for display.
+    """
+    vals = np.concatenate([np.asarray(d, float) for d in data_by_group.values() if len(d)])
+    if vals.size == 0:
+        return
+    top = float(np.percentile(vals, 99))
+    bottom = float(np.min(vals))
+    span = (top - bottom) or 1.0
+    step = span * 0.09
+    y0 = top + span * 0.06
+    for k, (g1, g2, p) in enumerate(pair_pvals):
+        x1, x2 = pos_by_group[g1], pos_by_group[g2]
+        y = y0 + k * step
+        h = step * 0.18
+        ax.plot([x1, x1, x2, x2], [y, y + h, y + h, y], lw=1.2, c='black')
+        ax.text((x1 + x2) / 2, y + h, _p_text(p), ha='center', va='bottom', fontsize=8)
+    ax.set_ylim(bottom - span * 0.05, y0 + len(pair_pvals) * step + span * 0.12)
+
+
+def _split_boxplots_with_pvals(feature_data, group_order, group_colors, pair_pvals_by_feature,
+                               out_prefix, ylabel='Pathway score'):
+    """One annotated boxplot per feature (pathway), so pairwise p-values are legible.
+
+    feature_data: {feature_col: {group: 1-D array}}
+    pair_pvals_by_feature: {feature_col: [(g1, g2, adj_p), ...]}
+    out_prefix: Path-like; files saved as <out_prefix>_<PathwayName>.png
+    """
+    out_prefix = Path(out_prefix)
+    out_prefix.parent.mkdir(parents=True, exist_ok=True)
+    for col, data_by_group in feature_data.items():
+        display = PATHWAY_DISPLAY.get(col, col)
+        fig, ax = plt.subplots(figsize=(4.5, 5))
+        data = [np.asarray(data_by_group[g], float) for g in group_order]
+        positions = np.arange(len(group_order))
+        bp = ax.boxplot(data, positions=positions, widths=0.6,
+                        patch_artist=True, showfliers=False,
+                        medianprops=dict(color='black', linewidth=1.5))
+        for patch, g in zip(bp['boxes'], group_order):
+            patch.set_facecolor(group_colors[g])
+            patch.set_edgecolor('black')
+        for elt in bp['whiskers'] + bp['caps']:
+            elt.set_color('black')
+
+        ax.set_xticks(positions)
+        ax.set_xticklabels(group_order, rotation=30, ha='right', fontsize=10)
+        ax.set_ylabel(ylabel)
+        ax.set_title(display)
+        for s in ('top', 'right'):
+            ax.spines[s].set_visible(False)
+
+        pos_by_group = {g: positions[i] for i, g in enumerate(group_order)}
+        _annotate_pairwise(ax, pos_by_group, data_by_group, pair_pvals_by_feature.get(col, []))
+
+        plt.tight_layout()
+        safe = display.replace(' ', '_')
+        save_path = out_prefix.parent / f"{out_prefix.name}_{safe}.png"
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.close(fig)
+        print(f"Saved split boxplot: {save_path}")
+
 EPITHELIAL_CATS = [
     'AT2', 'AT1', 'Suprabasal', 'Basal resting',
     'Multiciliated (non-nasal)', 'Goblet (nasal)',
@@ -234,9 +319,9 @@ def __figure_two_B_2(adata, save_path=None):
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
     plt.close(fig)
 
-def __figure_two_C(adata, save_path=None):
+def __figure_two_C(adata, save_path=None, source_data=False):
     epi = adata[
-        (adata.obs['leiden_res_0.10_celltype'].isin(EPITHELIAL_CATS))  
+        (adata.obs['leiden_res_0.10_celltype'].isin(EPITHELIAL_CATS))
         & (adata.obs['project'].isin(TARGET_PROJECTS))
     ].copy()
 
@@ -275,10 +360,12 @@ def __figure_two_C(adata, save_path=None):
 
     all_results = []
     pvals_for_fdr = []
-    fdr_index_map = [] 
+    fdr_index_map = []
+    feature_data = {}  # {col: {stage: values}} — the exact plotted arrays, for source data + split plots
 
     for col, lab in zip(cols, labels):
         data_by_stage = {st: epi.obs.loc[epi.obs['tumor_stage'] == st, col].dropna().values for st in stages}
+        feature_data[col] = data_by_stage
         for g1, g2 in itertools.combinations(stages, 2):
             x, y = data_by_stage[g1], data_by_stage[g2]
             if len(x) == 0 or len(y) == 0:
@@ -323,6 +410,37 @@ def __figure_two_C(adata, save_path=None):
     results_df.to_csv(csv_path, index=False)
     print(f"Saved stage-wise significance to: {csv_path}")
 
+    # ---- Source data + exact p-values + per-pathway split boxplots ----
+    if source_data:
+        # Tidy source data: one row per plotted cell value, correctly labeled pathway.
+        long_frames = [
+            long_from_group_dict(feature_data[col], feature=PATHWAY_DISPLAY.get(col, col),
+                                 group_col='tumor_stage')
+            for col in cols
+        ]
+        panel_csv(2, '2C_pathway_scores_by_stage', pd.concat(long_frames, ignore_index=True))
+
+        # Exact p-values with medians + direction; reuse the figure-wide FDR-BH adjusted p.
+        adj_lookup = {(r['feature'], r['group1'], r['group2']): r['p_value_adj_fdr_bh']
+                      for r in all_results}
+        pval_rows, pair_pvals_by_feature = [], {}
+        for col in cols:
+            display = PATHWAY_DISPLAY.get(col, col)
+            pair_pvals_by_feature[col] = []
+            for g1, g2 in itertools.combinations(stages, 2):
+                stat = mwu_with_direction(feature_data[col][g1], feature_data[col][g2], g1, g2)
+                adj = adj_lookup.get((col, g1, g2))
+                stat.update(panel='2C', feature=display,
+                            p_value_adj=adj, correction_method='fdr_bh')
+                pval_rows.append(stat)
+                pair_pvals_by_feature[col].append((g1, g2, adj))
+        write_pvalues(2, pval_rows)
+
+        _split_boxplots_with_pvals(
+            feature_data, stages, stage_colors, pair_pvals_by_feature,
+            out_prefix=figures_dir / 'figure_2C', ylabel='Pathway score',
+        )
+
     fig, ax = plt.subplots(figsize=(5, 5))
     for i, stage in enumerate(stages):
         data = [epi.obs.loc[epi.obs['tumor_stage'] == stage, col].dropna().values for col in cols]
@@ -365,7 +483,7 @@ def __figure_two_C(adata, save_path=None):
     else:
         plt.show()
 
-def __figure_two_G(adata, save_path=None):
+def __figure_two_G(adata, save_path=None, source_data=False):
     adata = adata[adata.obs['project'].isin(TARGET_PROJECTS)].copy()
 
     kras_mean = adata.obs["HALLMARK_KRAS_SIGNALING_UP"].mean()
@@ -405,9 +523,11 @@ def __figure_two_G(adata, save_path=None):
     all_results = []
     pvals_for_fdr = []
     fdr_index_map = []
+    feature_data = {}  # {col: {category: values}} — exact plotted arrays for source data + split plots
 
     for col, lab in zip(cols, labels):
         data_by_cat = {cat: adata.obs.loc[cat_mask(cat), col].dropna().values for cat in categories}
+        feature_data[col] = data_by_cat
         for c1, c2 in itertools.combinations(categories, 2):
             x, y = data_by_cat[c1], data_by_cat[c2]
             if len(x) == 0 or len(y) == 0:
@@ -451,6 +571,35 @@ def __figure_two_G(adata, save_path=None):
     csv_path = figures_dir / "figure_two_G_significance.csv"
     results_df.to_csv(csv_path, index=False)
     print(f"Saved category-wise significance to: {csv_path}")
+
+    # ---- Source data + exact p-values + per-pathway split boxplots ----
+    if source_data:
+        long_frames = [
+            long_from_group_dict(feature_data[col], feature=PATHWAY_DISPLAY.get(col, col),
+                                 group_col='kras_egfr_category')
+            for col in cols
+        ]
+        panel_csv(2, '2G_pathway_scores_by_kras_egfr', pd.concat(long_frames, ignore_index=True))
+
+        adj_lookup = {(r['feature'], r['category1'], r['category2']): r['p_value_adj_fdr_bh']
+                      for r in all_results}
+        pval_rows, pair_pvals_by_feature = [], {}
+        for col in cols:
+            display = PATHWAY_DISPLAY.get(col, col)
+            pair_pvals_by_feature[col] = []
+            for c1, c2 in itertools.combinations(categories, 2):
+                stat = mwu_with_direction(feature_data[col][c1], feature_data[col][c2], c1, c2)
+                adj = adj_lookup.get((col, c1, c2))
+                stat.update(panel='2G', feature=display,
+                            p_value_adj=adj, correction_method='fdr_bh')
+                pval_rows.append(stat)
+                pair_pvals_by_feature[col].append((c1, c2, adj))
+        write_pvalues(2, pval_rows)
+
+        _split_boxplots_with_pvals(
+            feature_data, categories, colors, pair_pvals_by_feature,
+            out_prefix=figures_dir / 'figure_2G', ylabel='Pathway score',
+        )
 
     # ---- Plot (unchanged, no annotations) ----
     fig, ax = plt.subplots(figsize=(5, 5))
@@ -502,10 +651,27 @@ def __figure_two_G(adata, save_path=None):
         plt.show()
 
 if __name__ == "__main__":
+    import argparse
+    import logging
+
+    parser = argparse.ArgumentParser(description="Figure 2 rendering / source-data export")
+    parser.add_argument("--source-data", action="store_true",
+                        help="Export per-panel source-data CSVs + exact p-values + split boxplots "
+                             "(2C, 2G) instead of the full figure render.")
+    args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     BASE_DIR = Path.cwd()
     adata = sc.read_h5ad(filename=str(BASE_DIR / 'data/processed_data.h5ad'))
-    __figure_two_A(adata, save_path=str(BASE_DIR / 'figures/figure_2A.png'))
-    __figure_two_B(adata, save_path=str(BASE_DIR / 'figures/figure_2B.png'))
-    __figure_two_B_2(adata, save_path=str(BASE_DIR / 'figures/figure_2B_2.png'))
-    __figure_two_G(adata, save_path=str(BASE_DIR / 'figures/figure_2G.png'))
-    __figure_two_C(adata, save_path=str(BASE_DIR / 'figures/figure_2C.png'))
+
+    if args.source_data:
+        # Only the quantitative graph panels (2C, 2G); UMAP panels 2A/2B/2B_2 are images (out of scope).
+        __figure_two_G(adata, save_path=str(BASE_DIR / 'figures/figure_2G.png'), source_data=True)
+        __figure_two_C(adata, save_path=str(BASE_DIR / 'figures/figure_2C.png'), source_data=True)
+        aggregate_to_excel(2)
+    else:
+        __figure_two_A(adata, save_path=str(BASE_DIR / 'figures/figure_2A.png'))
+        __figure_two_B(adata, save_path=str(BASE_DIR / 'figures/figure_2B.png'))
+        __figure_two_B_2(adata, save_path=str(BASE_DIR / 'figures/figure_2B_2.png'))
+        __figure_two_G(adata, save_path=str(BASE_DIR / 'figures/figure_2G.png'))
+        __figure_two_C(adata, save_path=str(BASE_DIR / 'figures/figure_2C.png'))

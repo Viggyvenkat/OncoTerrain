@@ -1,146 +1,65 @@
 from __future__ import annotations
 
-import functools
 import json
 import logging
-from pathlib import Path
 
-import joblib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scanpy as sc
-import torch
-from scipy import sparse
 from sklearn.metrics import accuracy_score
-from sklearn.model_selection import train_test_split
+
+from revision_common import (
+    DATA_PATH,
+    ONCOTERRAIN_JOBLIB,
+    RANDOM_STATE,
+    REPO_ROOT,
+    densify,
+    label_names_from_bundle,
+    load_tabnet_bundle,
+    oncoterrain_feature_matrix,
+    prepare_manuscript_matched_cohort,
+    scale_feature_frame,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("sensitivity_analysis")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-DATA_PATH = REPO_ROOT / "data" / "processed_data.h5ad"
-ONCOTERRAIN_JOBLIB = REPO_ROOT / "src" / "OncoTerrain" / "OncoTerrain.joblib"
 BASELINE_BUNDLE = REPO_ROOT / "src" / "revision-analyses" / "outputs" / "baseline_geneexp" / "baseline_geneexp.joblib"
 OUT_DIR = REPO_ROOT / "src" / "revision-analyses" / "outputs" / "sensitivity"
 
-TUMOR_STAGE_MAP = {"non-cancer": 0, "early": 1, "advanced": 2}
-LABEL_NAMES = {0: "Normal-like", 1: "Pre-malignant", 2: "Tumor-like"}
-RANDOM_STATE = 42
 CLASS_IDS = np.array([0, 1, 2])
 DROPOUT_FRACTIONS = (0.00, 0.01, 0.05, 0.10, 0.20, 0.30)
 DROPOUT_REPEATS = 20
 MODEL_COLORS = {"OncoTerrain": "#FF8C00", "baseline_geneexp_tabnet": "#5B8FA8"}
 
 
-def _densify(X):
-    return X.toarray() if sparse.issparse(X) else np.asarray(X)
-
-
-def _oncoterrain_feature_matrix(adata, feature_list):
-    meta = adata.obs.copy()
-    drop_cols = [
-        "disease",
-        "sample",
-        "source",
-        "tissue",
-        "n_genes",
-        "batch",
-        "n_genes_by_counts",
-        "total_counts",
-        "total_counts_mt",
-        "pct_counts_mt",
-        "leiden_res_0.10",
-        "leiden_res_1.00",
-        "leiden_res_5.00",
-        "leiden_res_10.00",
-        "leiden_res_20.00",
-        "leiden_res_0.10_celltype",
-        "leiden_res_1.00_celltype",
-        "leiden_res_5.00_celltype",
-        "leiden_res_10.00_celltype",
-        "tumor_stage",
-        "project",
-    ]
-    for c in drop_cols:
-        if c in meta.columns:
-            meta = meta.drop(columns=[c])
-    meta.columns = meta.columns.str.replace("^HALLMARK_", "", regex=True)
-
-    ctkey = "leiden_res_20.00_celltype"
-    if ctkey in meta.columns:
-        meta = meta.drop(columns=[ctkey])
-
-    meta = meta.apply(pd.to_numeric, errors="coerce")
-    bool_cols = meta.select_dtypes(include=["boolean", "bool"]).columns
-    if len(bool_cols):
-        meta[bool_cols] = meta[bool_cols].astype(np.float32)
-    meta.replace([np.inf, -np.inf], np.nan, inplace=True)
-    meta.fillna(0.0, inplace=True)
-
-    for col in feature_list:
-        if col not in meta.columns:
-            meta[col] = 0.0
-    extra = set(meta.columns) - set(feature_list)
-    if extra:
-        meta = meta.drop(columns=list(extra))
-    return meta[feature_list].astype(np.float32)
-
-
 def _gene_expression_matrix(adata, gene_names):
     gene_names = list(gene_names)
+    X = np.zeros((adata.n_obs, len(gene_names)), dtype=np.float32)
+    present = [gene for gene in gene_names if gene in adata.var_names]
+    if present:
+        present_idx = [gene_names.index(gene) for gene in present]
+        X[:, present_idx] = densify(adata[:, present].X).astype(np.float32, copy=False)
     missing = [gene for gene in gene_names if gene not in adata.var_names]
     if missing:
         log.warning("Missing genes in AnnData (first 20): %s", missing[:20])
-
-    present = [gene for gene in gene_names if gene in adata.var_names]
-    X = np.zeros((adata.n_obs, len(gene_names)), dtype=np.float32)
-    if present:
-        present_idx = [gene_names.index(gene) for gene in present]
-        X[:, present_idx] = _densify(adata[:, present].X).astype(np.float32, copy=False)
     return X
 
 
-def _predict(model, scaler, X_df):
-    X = scaler.transform(X_df)
-    if not np.isfinite(X).all():
-        X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
-    return model.predict_proba(X.astype(np.float32))
-
-
-def _predict_scaled(model, X_scaled):
+def _predict_scaled(model, X_scaled, class_ids):
     proba = model.predict_proba(np.asarray(X_scaled, dtype=np.float32))
     if not np.isfinite(proba).all():
         proba = np.nan_to_num(proba, nan=0.0, posinf=0.0, neginf=0.0)
-    model_classes = getattr(model, "classes_", CLASS_IDS)
-    if list(model_classes) != list(CLASS_IDS):
-        order = [list(model_classes).index(c) for c in CLASS_IDS]
+    model_classes = np.asarray(getattr(model, "classes_", class_ids))
+    if list(model_classes) != list(class_ids):
+        order = [list(model_classes).index(cid) for cid in class_ids]
         proba = proba[:, order]
     return proba
 
 
-def _load_tabnet_bundle(bundle_path: Path):
-    _orig_torch_load = torch.load
-    torch.load = functools.partial(_orig_torch_load, map_location=torch.device("cpu"))
-    try:
-        bundle = joblib.load(bundle_path)
-    finally:
-        torch.load = _orig_torch_load
-
-    model = bundle["model"]
-    if hasattr(model, "best_estimator_"):
-        model = model.best_estimator_
-    if hasattr(model, "device_name"):
-        model.device_name = "cpu"
-    if hasattr(model, "device"):
-        model.device = torch.device("cpu")
-    if hasattr(model, "network") and model.network is not None:
-        model.network = model.network.to("cpu")
-    return bundle, model
-
-
-def _dropout_sensitivity(model_name, model, X_scaled, y_true):
-    base_proba = _predict_scaled(model, X_scaled)
+def _dropout_sensitivity(model_name, model, X_scaled, y_true, class_ids, metadata):
+    base_proba = _predict_scaled(model, X_scaled, class_ids)
     base_pred = np.argmax(base_proba, axis=1)
     base_acc = accuracy_score(y_true, base_pred)
     n_features = X_scaled.shape[1]
@@ -158,13 +77,15 @@ def _dropout_sensitivity(model_name, model, X_scaled, y_true):
                 drop_idx = rng.choice(n_features, size=n_drop, replace=False)
                 X_corrupt[:, drop_idx] = 0.0
 
-            proba = _predict_scaled(model, X_corrupt)
+            proba = _predict_scaled(model, X_corrupt, class_ids)
             pred = np.argmax(proba, axis=1)
             abs_delta = np.abs(proba - base_proba)
             acc = accuracy_score(y_true, pred)
             records.append(
                 {
                     "model": model_name,
+                    "evaluation_cohort": metadata["evaluation_cohort"],
+                    "split_seed": metadata["random_state"],
                     "dropout_fraction": float(frac),
                     "repeat": int(repeat),
                     "n_features_total": int(n_features),
@@ -178,7 +99,10 @@ def _dropout_sensitivity(model_name, model, X_scaled, y_true):
 
     repeat_df = pd.DataFrame(records)
     summary_df = (
-        repeat_df.groupby(["model", "dropout_fraction", "n_features_total", "n_features_dropped"], as_index=False)
+        repeat_df.groupby(
+            ["model", "evaluation_cohort", "split_seed", "dropout_fraction", "n_features_total", "n_features_dropped"],
+            as_index=False,
+        )
         .agg(
             mean_accuracy=("accuracy", "mean"),
             std_accuracy=("accuracy", "std"),
@@ -227,79 +151,55 @@ def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     log.info("Loading OncoTerrain bundle: %s", ONCOTERRAIN_JOBLIB)
-    bundle, model = _load_tabnet_bundle(ONCOTERRAIN_JOBLIB)
-    features = list(bundle["features"])
-    scaler = bundle["scaler"]
+    ot_bundle, model = load_tabnet_bundle(ONCOTERRAIN_JOBLIB)
+    label_names = label_names_from_bundle(ot_bundle)
+    class_ids = np.array(sorted(label_names))
 
     log.info("Loading %s", DATA_PATH)
     adata = sc.read_h5ad(DATA_PATH)
+    cohort = prepare_manuscript_matched_cohort(adata, random_state=RANDOM_STATE, logger=log)
 
-    stage = adata.obs["tumor_stage"].astype(str)
-    if stage.isin(TUMOR_STAGE_MAP).all():
-        y_full = stage.map(TUMOR_STAGE_MAP).astype(int).values
-    else:
-        y_full = adata.obs["tumor_stage"].astype(int).values
+    X_full = oncoterrain_feature_matrix(cohort.obs, ot_bundle["features"])
+    y_test = cohort.y[cohort.idx_test].astype(int)
+    X_test_df = X_full.iloc[cohort.idx_test].reset_index(drop=True)
+    X_test_scaled = scale_feature_frame(X_test_df, ot_bundle["scaler"], ot_bundle)
 
-    X_full = _oncoterrain_feature_matrix(adata, features)
-
-    idx = np.arange(len(y_full))
-    _, idx_test, _, y_test = train_test_split(
-        idx, y_full, test_size=0.3, random_state=RANDOM_STATE, stratify=y_full
-    )
-    log.info("Held-out test cells: %d", len(idx_test))
-
-    X_test = X_full.iloc[idx_test].reset_index(drop=True)
-    y_test = np.asarray(y_test)
-
-    proba_base = _predict(model, scaler, X_test)
-
-    model_classes = getattr(model, "classes_", CLASS_IDS)
-    if list(model_classes) != list(CLASS_IDS):
-        order = [list(model_classes).index(c) for c in CLASS_IDS]
-        proba_base = proba_base[:, order]
-
+    proba_base = _predict_scaled(model, X_test_scaled, class_ids)
     pred_base = np.argmax(proba_base, axis=1)
     base_acc = accuracy_score(y_test, pred_base)
-    log.info("Baseline accuracy on test fold: %.4f", base_acc)
+    log.info("Figure-5-matched OncoTerrain accuracy on shared split: %.4f", base_acc)
 
     records = []
-    for i, feat in enumerate(features, start=1):
-        X_ab = X_test.copy()
-        X_ab[feat] = 0.0
-        proba_ab = _predict(model, scaler, X_ab)
-        if list(model_classes) != list(CLASS_IDS):
-            proba_ab = proba_ab[:, order]
+    for i, feat in enumerate(X_test_df.columns, start=1):
+        X_ab = X_test_df.copy()
+        X_ab.loc[:, feat] = 0.0
+        proba_ab = _predict_scaled(model, scale_feature_frame(X_ab, ot_bundle["scaler"], ot_bundle), class_ids)
         pred_ab = np.argmax(proba_ab, axis=1)
 
-        delta = proba_ab - proba_base
-        abs_delta = np.abs(delta)
-        l1 = abs_delta.sum(axis=1).mean()
-        flip_frac = float((pred_ab != pred_base).mean())
-        ab_acc = accuracy_score(y_test, pred_ab)
-        delta_acc = ab_acc - base_acc
-
+        abs_delta = np.abs(proba_ab - proba_base)
         row = {
             "feature": feat,
-            "mean_abs_delta_Normal-like": float(abs_delta[:, 0].mean()),
-            "mean_abs_delta_Pre-malignant": float(abs_delta[:, 1].mean()),
-            "mean_abs_delta_Tumor-like": float(abs_delta[:, 2].mean()),
-            "mean_L1_proba_shift": float(l1),
-            "pred_flip_fraction": flip_frac,
-            "ablated_accuracy": float(ab_acc),
-            "delta_accuracy": float(delta_acc),
+            "evaluation_cohort": cohort.metadata["evaluation_cohort"],
+            "split_seed": cohort.metadata["random_state"],
+            "mean_L1_proba_shift": float(abs_delta.sum(axis=1).mean()),
+            "pred_flip_fraction": float((pred_ab != pred_base).mean()),
+            "ablated_accuracy": float(accuracy_score(y_test, pred_ab)),
+            "delta_accuracy": float(accuracy_score(y_test, pred_ab) - base_acc),
         }
-        for cid in CLASS_IDS:
+        for col_idx, cid in enumerate(class_ids):
+            class_name = label_names[int(cid)]
+            row[f"mean_abs_delta_{class_name}"] = float(abs_delta[:, col_idx].mean())
             mask = y_test == cid
             if mask.any():
-                row[f"mean_L1_shift_{LABEL_NAMES[int(cid)]}"] = float(abs_delta[mask].sum(axis=1).mean())
-                row[f"flip_fraction_{LABEL_NAMES[int(cid)]}"] = float((pred_ab[mask] != pred_base[mask]).mean())
+                row[f"mean_L1_shift_{class_name}"] = float(abs_delta[mask].sum(axis=1).mean())
+                row[f"flip_fraction_{class_name}"] = float((pred_ab[mask] != pred_base[mask]).mean())
             else:
-                row[f"mean_L1_shift_{LABEL_NAMES[int(cid)]}"] = float("nan")
-                row[f"flip_fraction_{LABEL_NAMES[int(cid)]}"] = float("nan")
+                row[f"mean_L1_shift_{class_name}"] = float("nan")
+                row[f"flip_fraction_{class_name}"] = float("nan")
         records.append(row)
 
-        if i % 5 == 0 or i == len(features):
-            log.info("Ablated %d/%d features", i, len(features))
+        if i % 5 == 0 or i == X_test_df.shape[1]:
+            log.info("Ablated %d/%d features", i, X_test_df.shape[1])
 
     df = pd.DataFrame(records).sort_values("mean_L1_proba_shift", ascending=False).reset_index(drop=True)
     csv_path = OUT_DIR / "feature_sensitivity.csv"
@@ -317,17 +217,15 @@ def main():
     plt.close(fig)
     log.info("Wrote %s", bar_png)
 
-    heat_df = df.set_index("feature")[[
-        "mean_abs_delta_Normal-like",
-        "mean_abs_delta_Pre-malignant",
-        "mean_abs_delta_Tumor-like",
-    ]].head(30)
+    heat_cols = [f"mean_abs_delta_{label_names[int(cid)]}" for cid in class_ids]
+    heat_labels = [label_names[int(cid)] for cid in class_ids]
+    heat_df = df.set_index("feature")[heat_cols].head(30)
     fig, ax = plt.subplots(figsize=(7, 10))
     im = ax.imshow(heat_df.values, aspect="auto", cmap="viridis")
     ax.set_yticks(range(len(heat_df.index)))
     ax.set_yticklabels(heat_df.index, fontsize=8)
-    ax.set_xticks(range(heat_df.shape[1]))
-    ax.set_xticklabels(["Normal-like", "Pre-malignant", "Tumor-like"], rotation=30, ha="right")
+    ax.set_xticks(range(len(heat_labels)))
+    ax.set_xticklabels(heat_labels, rotation=30, ha="right")
     ax.set_title("Per-class mean |Δ probability| (top-30 features)")
     fig.colorbar(im, ax=ax, shrink=0.6)
     plt.tight_layout()
@@ -336,27 +234,23 @@ def main():
     plt.close(fig)
     log.info("Wrote %s", heat_png)
 
-    baseline_bundle, baseline_model = _load_tabnet_bundle(BASELINE_BUNDLE)
+    baseline_bundle, baseline_model = load_tabnet_bundle(BASELINE_BUNDLE)
     baseline_features = list(baseline_bundle["features"])
     baseline_scaler = baseline_bundle["scaler"]
-    X_gene = _gene_expression_matrix(adata, baseline_features)
-    X_gene_test = X_gene[idx_test]
-    X_gene_test_s = baseline_scaler.transform(X_gene_test)
-    X_gene_test_s = np.asarray(X_gene_test_s, dtype=np.float32)
+    X_gene = _gene_expression_matrix(cohort.adata, baseline_features)
+    X_gene_test = X_gene[cohort.idx_test]
+    X_gene_test_s = baseline_scaler.transform(X_gene_test).astype(np.float32, copy=False)
     if not np.isfinite(X_gene_test_s).all():
         X_gene_test_s = np.nan_to_num(X_gene_test_s, nan=0.0, posinf=0.0, neginf=0.0)
 
-    X_ot_test_s = scaler.transform(X_test)
-    X_ot_test_s = np.asarray(X_ot_test_s, dtype=np.float32)
-    if not np.isfinite(X_ot_test_s).all():
-        X_ot_test_s = np.nan_to_num(X_ot_test_s, nan=0.0, posinf=0.0, neginf=0.0)
-
-    _, ot_curve, ot_dropout_base_acc = _dropout_sensitivity("OncoTerrain", model, X_ot_test_s, y_test)
+    _, ot_curve, ot_dropout_base_acc = _dropout_sensitivity("OncoTerrain", model, X_test_scaled, y_test, class_ids, cohort.metadata)
     _, baseline_curve, baseline_dropout_base_acc = _dropout_sensitivity(
         "baseline_geneexp_tabnet",
         baseline_model,
         X_gene_test_s,
         y_test,
+        class_ids,
+        cohort.metadata,
     )
 
     baseline_csv = OUT_DIR / "gene_expression_dropout_sensitivity.csv"
@@ -375,9 +269,11 @@ def main():
     ot_auc = float(np.trapz(ot_curve_sorted["mean_accuracy"], x=ot_curve_sorted["dropout_fraction"]))
     baseline_auc = float(np.trapz(baseline_curve_sorted["mean_accuracy"], x=baseline_curve_sorted["dropout_fraction"]))
     summary = {
+        **cohort.metadata,
+        "label_names": {str(k): v for k, v in label_names.items()},
         "dropout_fractions": list(DROPOUT_FRACTIONS),
         "dropout_repeats": DROPOUT_REPEATS,
-        "heldout_test_cells": int(len(idx_test)),
+        "heldout_test_cells": int(len(cohort.idx_test)),
         "oncoterrain_base_accuracy": float(ot_dropout_base_acc),
         "oncoterrain_feature_ablation_base_accuracy": float(base_acc),
         "baseline_gene_expression_base_accuracy": float(baseline_dropout_base_acc),

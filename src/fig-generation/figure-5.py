@@ -876,42 +876,42 @@ if __name__ == '__main__':
 
     updated_meta_data, _, _ = __feature_analysis_w_preprocessing(meta_data)
     
-    numeric_cols_main = updated_meta_data.select_dtypes(include=[np.number]).columns
-    NON_FEATURES = {'tumor_stage', 'project', 'leiden_res_20.00_celltype', 'leiden_res_0.50', 'leiden_res_2.00'}
-    feature_cols = [c for c in numeric_cols_main if c not in NON_FEATURES]
-    hallmark_list = [c for c in feature_cols if c in CONDITIONS.keys()]
-    logging.info(f"Identified hallmark features: {list(hallmark_list)}")
+    # numeric_cols_main = updated_meta_data.select_dtypes(include=[np.number]).columns
+    # NON_FEATURES = {'tumor_stage', 'project', 'leiden_res_20.00_celltype', 'leiden_res_0.50', 'leiden_res_2.00'}
+    # feature_cols = [c for c in numeric_cols_main if c not in NON_FEATURES]
+    # hallmark_list = [c for c in feature_cols if c in CONDITIONS.keys()]
+    # logging.info(f"Identified hallmark features: {list(hallmark_list)}")
     
-    features = updated_meta_data[feature_cols].to_numpy()
-    tumor_stage = updated_meta_data['tumor_stage']
+    # features = updated_meta_data[feature_cols].to_numpy()
+    # tumor_stage = updated_meta_data['tumor_stage']
     
-    logging.info("Initializing UMAP reducer with parameters: n_neighbors=50, min_dist=0.05, metric='euclidean'")
-    reducer = umap.UMAP(n_neighbors=50, min_dist=0.05, metric='euclidean', random_state=42)
+    # logging.info("Initializing UMAP reducer with parameters: n_neighbors=50, min_dist=0.05, metric='euclidean'")
+    # reducer = umap.UMAP(n_neighbors=50, min_dist=0.05, metric='euclidean', random_state=42)
     
-    logging.info("Fitting UMAP to features and transforming.")
-    embedding = reducer.fit_transform(features)
-    logging.info("UMAP embedding shape: %s", embedding.shape)
+    # logging.info("Fitting UMAP to features and transforming.")
+    # embedding = reducer.fit_transform(features)
+    # logging.info("UMAP embedding shape: %s", embedding.shape)
     
-    fig5B_path = BASE_DIR / 'figures/fig-5B.png'
-    fig5C_path = BASE_DIR / 'figures/fig-5C'
-    fig5D_path = BASE_DIR / 'figures/fig-5D.png'
+    # fig5B_path = BASE_DIR / 'figures/fig-5B.png'
+    # fig5C_path = BASE_DIR / 'figures/fig-5C'
+    # fig5D_path = BASE_DIR / 'figures/fig-5D.png'
 
-    df = mannwhitney_by_stage_all_columns(
-        updated_meta_data,
-        stage_key="tumor_stage",
-        stage_order=(0, 1, 2),  
-        exclude_cols=("project", "leiden_res_20.00_celltype"),
-        output_csv="figures/supplementary_table_three.csv"
-    )
+    # df = mannwhitney_by_stage_all_columns(
+    #     updated_meta_data,
+    #     stage_key="tumor_stage",
+    #     stage_order=(0, 1, 2),  
+    #     exclude_cols=("project", "leiden_res_20.00_celltype"),
+    #     output_csv="figures/supplementary_table_three.csv"
+    # )
     
-    logging.info("Generating figure 5B.")
-    __figure_five_B(updated_meta_data, save_path=str(fig5B_path), embedding=embedding)
+    # logging.info("Generating figure 5B.")
+    # __figure_five_B(updated_meta_data, save_path=str(fig5B_path), embedding=embedding)
     
-    logging.info("Generating figure 5C.")
-    __figure_five_C(updated_meta_data, save_path=str(fig5C_path), embedding=embedding, hallmark_list=hallmark_list)
+    # logging.info("Generating figure 5C.")
+    # __figure_five_C(updated_meta_data, save_path=str(fig5C_path), embedding=embedding, hallmark_list=hallmark_list)
     
-    logging.info("Generating figure 5D.")
-    __figure_five_D(updated_meta_data, save_path=str(fig5D_path))
+    # logging.info("Generating figure 5D.")
+    # __figure_five_D(updated_meta_data, save_path=str(fig5D_path))
 
     stages_to_plot = {
         0: "Non-Cancer",
@@ -933,7 +933,7 @@ if __name__ == '__main__':
     logging.info("Training model.")
     model = __train_model(updated_meta_data)
     
-    __figure_five_H()
-    __figure_five_F(save_path=BASE_DIR / 'figures/fig-5F', mice_data = pd.read_csv(BASE_DIR / 'data/averaged_gene_expression_nature_mice_supp_1.csv'))
+    # __figure_five_H()
+    # __figure_five_F(save_path=BASE_DIR / 'figures/fig-5F', mice_data = pd.read_csv(BASE_DIR / 'data/averaged_gene_expression_nature_mice_supp_1.csv'))
 
-    logging.info("Script finished successfully.")
+    # logging.info("Script finished successfully.")
