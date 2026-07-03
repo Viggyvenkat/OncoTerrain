@@ -574,8 +574,14 @@ def __figure_two_G(adata, save_path=None, source_data=False):
 
     # ---- Source data + exact p-values + per-pathway split boxplots ----
     if source_data:
+        # Rename the 'None' category to 'Neither' (avoids pandas reading the literal token
+        # "None" back as NaN, and matches the label used in Fig 3L for the same group).
+        relab = {'None': 'Neither'}
+        dc = lambda c: relab.get(c, c)
+
         long_frames = [
-            long_from_group_dict(feature_data[col], feature=PATHWAY_DISPLAY.get(col, col),
+            long_from_group_dict({dc(k): v for k, v in feature_data[col].items()},
+                                 feature=PATHWAY_DISPLAY.get(col, col),
                                  group_col='kras_egfr_category')
             for col in cols
         ]
@@ -588,17 +594,18 @@ def __figure_two_G(adata, save_path=None, source_data=False):
             display = PATHWAY_DISPLAY.get(col, col)
             pair_pvals_by_feature[col] = []
             for c1, c2 in itertools.combinations(categories, 2):
-                stat = mwu_with_direction(feature_data[col][c1], feature_data[col][c2], c1, c2)
+                stat = mwu_with_direction(feature_data[col][c1], feature_data[col][c2], dc(c1), dc(c2))
                 adj = adj_lookup.get((col, c1, c2))
                 stat.update(panel='2G', feature=display,
                             p_value_adj=adj, correction_method='fdr_bh')
                 pval_rows.append(stat)
-                pair_pvals_by_feature[col].append((c1, c2, adj))
+                pair_pvals_by_feature[col].append((dc(c1), dc(c2), adj))
         write_pvalues(2, pval_rows)
 
+        plot_data = {col: {dc(k): v for k, v in feature_data[col].items()} for col in cols}
         _split_boxplots_with_pvals(
-            feature_data, categories, colors, pair_pvals_by_feature,
-            out_prefix=figures_dir / 'figure_2G', ylabel='Pathway score',
+            plot_data, [dc(c) for c in categories], {dc(k): v for k, v in colors.items()},
+            pair_pvals_by_feature, out_prefix=figures_dir / 'figure_2G', ylabel='Pathway score',
         )
 
     # ---- Plot (unchanged, no annotations) ----

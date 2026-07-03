@@ -139,13 +139,17 @@ def aggregate_to_excel(fig: int) -> Path | None:
         log.warning("No source-data CSVs found for figure %d; skipping Excel aggregation.", fig)
         return None
 
+    # keep_default_na=False + na_values=[""] preserves legitimate string labels (e.g. a category
+    # literally named "None"/"NA") while still treating empty numeric cells as missing.
+    read = lambda p: pd.read_csv(p, keep_default_na=False, na_values=[""])
+
     xlsx = d / f"Figure_{fig}_source_data.xlsx"
     used: set[str] = set()
     with pd.ExcelWriter(xlsx, engine="openpyxl") as writer:
         for csv in panel_csvs:
             stem = csv.name.replace(f"figure_{fig}_", "").replace("_source_data.csv", "")
-            pd.read_csv(csv).to_excel(writer, sheet_name=_sheet_name(stem, used), index=False)
+            read(csv).to_excel(writer, sheet_name=_sheet_name(stem, used), index=False)
         if pval_csv.exists():
-            pd.read_csv(pval_csv).to_excel(writer, sheet_name=_sheet_name("pvalues", used), index=False)
+            read(pval_csv).to_excel(writer, sheet_name=_sheet_name("pvalues", used), index=False)
     log.info("Wrote %s", xlsx)
     return xlsx
