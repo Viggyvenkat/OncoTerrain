@@ -1,0 +1,11 @@
+"source","target","ligand","receptor","prob","pval","interaction_name","interaction_name_2","pathway_name","annotation","evidence","thresh_used"
+"Alveolar macrophages","AT1","COL1A2","ITGA2_ITGB1",0.0426079435270382,0,"COL1A2_ITGA2_ITGB1","COL1A2 - (ITGA2+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.01
+"Alveolar macrophages","AT1","FN1","ITGA3_ITGB1",0.0793286507451976,0,"FN1_ITGA3_ITGB1","FN1 - (ITGA3+ITGB1)","FN1","ECM-Receptor","KEGG: hsa04512",0.01
+"DC2","AT1","FN1","ITGA3_ITGB1",0.0797905132136089,0,"FN1_ITGA3_ITGB1","FN1 - (ITGA3+ITGB1)","FN1","ECM-Receptor","KEGG: hsa04512",0.01
+"Alveolar macrophages","Multiciliated (nasal)","FN1","ITGA3_ITGB1",0.0412197227174459,0,"FN1_ITGA3_ITGB1","FN1 - (ITGA3+ITGB1)","FN1","ECM-Receptor","KEGG: hsa04512",0.01
+"DC2","Multiciliated (nasal)","FN1","ITGA3_ITGB1",0.0414697036066641,0,"FN1_ITGA3_ITGB1","FN1 - (ITGA3+ITGB1)","FN1","ECM-Receptor","KEGG: hsa04512",0.01
+"Alveolar macrophages","AT1","COL1A2","ITGA3_ITGB1",0.0748478247671391,0,"COL1A2_ITGA3_ITGB1","COL1A2 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.01
+"Alveolar macrophages","Multiciliated (nasal)","COL1A2","ITGA3_ITGB1",0.0388007368517868,0,"COL1A2_ITGA3_ITGB1","COL1A2 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.01
+"Alveolar macrophages","Multiciliated (non-nasal)","COL1A2","SDC4",0.160600314653292,0,"COL1A2_SDC4","COL1A2 - SDC4","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.01
+"Alveolar macrophages","Multiciliated (non-nasal)","FN1","SDC4",0.169275478536917,0,"FN1_SDC4","FN1 - SDC4","FN1","ECM-Receptor","KEGG: hsa04512",0.01
+"DC2","Multiciliated (non-nasal)","FN1","SDC4",0.170164233620368,0,"FN1_SDC4","FN1 - SDC4","FN1","ECM-Receptor","KEGG: hsa04512",0.01

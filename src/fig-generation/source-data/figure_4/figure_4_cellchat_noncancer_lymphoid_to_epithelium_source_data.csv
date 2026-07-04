@@ -1,0 +1,14 @@
+"source","target","ligand","receptor","prob","pval","interaction_name","interaction_name_2","pathway_name","annotation","evidence","thresh_used"
+"CD4 T cells","Goblet (nasal)","LAMC1","ITGA2_ITGB1",0.0126088068999783,0,"LAMC1_ITGA2_ITGB1","LAMC1 - (ITGA2+ITGB1)","LAMININ","ECM-Receptor","KEGG: hsa04512",0.01
+"CD4 T cells","AT1","LAMC1","ITGA3_ITGB1",0.0192140365340754,0,"LAMC1_ITGA3_ITGB1","LAMC1 - (ITGA3+ITGB1)","LAMININ","ECM-Receptor","KEGG: hsa04512",0.01
+"CD4 T cells","Goblet (nasal)","LAMC1","ITGA3_ITGB1",0.0110652999603252,0,"LAMC1_ITGA3_ITGB1","LAMC1 - (ITGA3+ITGB1)","LAMININ","ECM-Receptor","KEGG: hsa04512",0.01
+"CD4 T cells","Multiciliated (nasal)","LAMC1","ITGA3_ITGB1",0.015075197006551,0,"LAMC1_ITGA3_ITGB1","LAMC1 - (ITGA3+ITGB1)","LAMININ","ECM-Receptor","KEGG: hsa04512",0.01
+"CD4 T cells","Goblet (nasal)","LAMC1","CD44",0.0140887102321047,0,"LAMC1_CD44","LAMC1 - CD44","LAMININ","ECM-Receptor","KEGG: hsa04512",0.01
+"CD4 T cells","Multiciliated (nasal)","CD46","JAG1",0.0038807301325418,0,"CD46_JAG1","CD46 - JAG1","CD46","Cell-Cell Contact","PMID: 23086448",0.01
+"CD4 T cells","Goblet (nasal)","CD99","CD99L2",0.0112518745518461,0,"CD99_CD99L2","CD99 - CD99L2","CD99","Cell-Cell Contact","KEGG: hsa04514",0.01
+"CD4 T cells","Multiciliated (nasal)","SEMA4D","PLXNB1",0.00965029167103164,0,"SEMA4D_PLXNB1","SEMA4D - PLXNB1","SEMA4","Cell-Cell Contact","PMID: 27533782",0.01
+"CD4 T cells","Multiciliated (nasal)","SEMA4D","PLXNB2",0.0106692675984666,0,"SEMA4D_PLXNB2","SEMA4D - PLXNB2","SEMA4","Cell-Cell Contact","PMID: 27533782",0.01
+"CD4 T cells","Goblet (nasal)","NRXN3","CLSTN1",0.00773824379921046,0,"Q9HDB5_CLSTN1","NRXN3 - CLSTN1","NRXN","Cell-Cell Contact","PMID: 32434929",0.01
+"CD4 T cells","Multiciliated (nasal)","NRXN3","CLSTN1",0.0123586685972525,0,"Q9HDB5_CLSTN1","NRXN3 - CLSTN1","NRXN","Cell-Cell Contact","PMID: 32434929",0.01
+"CD4 T cells","AT1","CD99","PILRB",0.0151537843892014,0,"CD99_PILRB","Cd99 - Pilrb","CD99","Cell-Cell Contact","uniprot;PMID:18234675",0.01
+"CD4 T cells","Multiciliated (nasal)","CD99","PILRB",0.0146535045886787,0,"CD99_PILRB","Cd99 - Pilrb","CD99","Cell-Cell Contact","uniprot;PMID:18234675",0.01

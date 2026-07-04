@@ -1,0 +1,133 @@
+"source","target","ligand","receptor","prob","pval","interaction_name","interaction_name_2","pathway_name","annotation","evidence","thresh_used"
+"Alveolar fibroblasts","AT1","BMP5","BMPR1A_BMPR2",0.208495038228506,0,"BMP5_BMPR1A_BMPR2","BMP5 - (BMPR1A+BMPR2)","BMP","Secreted Signaling","KEGG: hsa04350; PMID:26893264",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","BMP5","BMPR1A_BMPR2",0.0680658237240831,0,"BMP5_BMPR1A_BMPR2","BMP5 - (BMPR1A+BMPR2)","BMP","Secreted Signaling","KEGG: hsa04350; PMID:26893264",0.05
+"Alveolar fibroblasts","AT1","BMP5","BMPR1B_BMPR2",0.134550964090364,0,"BMP5_BMPR1B_BMPR2","BMP5 - (BMPR1B+BMPR2)","BMP","Secreted Signaling","KEGG: hsa04350; PMID:26893264",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","BMP5","BMPR1B_BMPR2",0.0686592156778271,0,"BMP5_BMPR1B_BMPR2","BMP5 - (BMPR1B+BMPR2)","BMP","Secreted Signaling","KEGG: hsa04350; PMID:26893264",0.05
+"Alveolar fibroblasts","AT1","ANGPT1","TEK",0.0818186758897773,0,"ANGPT1_TEK","ANGPT1 - TEK","ANGPT","Secreted Signaling","PMID: 20651738",0.05
+"Adventitial fibroblasts","Multiciliated (non-nasal)","MDK","SDC4",0.303682297065488,0.01,"MDK_SDC4","MDK - SDC4","MK","Secreted Signaling","PMID: 28356350",0.05
+"Peribronchial fibroblasts","AT1","GRN","SORT1",0.0448680873197439,0,"GRN_SORT1","GRN - SORT1","GRN","Secreted Signaling","PMID: 29555433",0.05
+"Adventitial fibroblasts","Multiciliated (non-nasal)","PPIA","BSG",0.300502869635142,0,"PPIA_BSG","PPIA - BSG","CypA","Secreted Signaling","PMID: 36012604",0.05
+"Alveolar fibroblasts","AT1","SLIT2","ROBO1",0.108221043543504,0,"SLIT2_ROBO1","SLIT2 - ROBO1","SLIT","Secreted Signaling","PMID:10102268",0.05
+"Alveolar fibroblasts","AT1","COL1A1","ITGA2_ITGB1",0.0206396135532146,0,"COL1A1_ITGA2_ITGB1","COL1A1 - (ITGA2+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","AT1","COL1A1","ITGA2_ITGB1",0.155856039698656,0,"COL1A1_ITGA2_ITGB1","COL1A1 - (ITGA2+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","COL1A2","ITGA2_ITGB1",0.0684886339281159,0,"COL1A2_ITGA2_ITGB1","COL1A2 - (ITGA2+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","AT1","COL1A2","ITGA2_ITGB1",0.156480490586513,0,"COL1A2_ITGA2_ITGB1","COL1A2 - (ITGA2+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","COL4A1","ITGA2_ITGB1",0.0229585465486431,0,"COL4A1_ITGA2_ITGB1","COL4A1 - (ITGA2+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","AT1","COL4A1","ITGA2_ITGB1",0.113309425410087,0,"COL4A1_ITGA2_ITGB1","COL4A1 - (ITGA2+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","COL4A2","ITGA2_ITGB1",0.0229507029592998,0,"COL4A2_ITGA2_ITGB1","COL4A2 - (ITGA2+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","AT1","COL4A2","ITGA2_ITGB1",0.0414052453049281,0,"COL4A2_ITGA2_ITGB1","COL4A2 - (ITGA2+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","COL4A5","ITGA2_ITGB1",0.0204858960375359,0,"COL4A5_ITGA2_ITGB1","COL4A5 - (ITGA2+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","COL6A1","ITGA2_ITGB1",0.0652199469491694,0,"COL6A1_ITGA2_ITGB1","COL6A1 - (ITGA2+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","AT1","COL6A1","ITGA2_ITGB1",0.118352478108034,0,"COL6A1_ITGA2_ITGB1","COL6A1 - (ITGA2+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","COL6A2","ITGA2_ITGB1",0.0576204215882108,0,"COL6A2_ITGA2_ITGB1","COL6A2 - (ITGA2+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","AT1","COL6A2","ITGA2_ITGB1",0.126155987352291,0,"COL6A2_ITGA2_ITGB1","COL6A2 - (ITGA2+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","COL6A3","ITGA2_ITGB1",0.0882998176126414,0,"COL6A3_ITGA2_ITGB1","COL6A3 - (ITGA2+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","AT1","COL6A3","ITGA2_ITGB1",0.155043804981469,0,"COL6A3_ITGA2_ITGB1","COL6A3 - (ITGA2+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","COL6A6","ITGA2_ITGB1",0.0710776531227146,0,"COL6A6_ITGA2_ITGB1","COL6A6 - (ITGA2+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","FN1","ITGA3_ITGB1",0.159337475219021,0,"FN1_ITGA3_ITGB1","FN1 - (ITGA3+ITGB1)","FN1","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","AT1","FN1","ITGA3_ITGB1",0.251050762284511,0,"FN1_ITGA3_ITGB1","FN1 - (ITGA3+ITGB1)","FN1","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","FN1","ITGA3_ITGB1",0.0863998412993244,0,"FN1_ITGA3_ITGB1","FN1 - (ITGA3+ITGB1)","FN1","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (nasal)","FN1","ITGA3_ITGB1",0.143286509125238,0,"FN1_ITGA3_ITGB1","FN1 - (ITGA3+ITGB1)","FN1","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","LAMA2","ITGA2_ITGB1",0.0929509606548349,0,"LAMA2_ITGA2_ITGB1","LAMA2 - (ITGA2+ITGB1)","LAMININ","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","LAMA4","ITGA2_ITGB1",0.092752856272048,0,"LAMA4_ITGA2_ITGB1","LAMA4 - (ITGA2+ITGB1)","LAMININ","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","LAMB1","ITGA2_ITGB1",0.0662123369432272,0,"LAMB1_ITGA2_ITGB1","LAMB1 - (ITGA2+ITGB1)","LAMININ","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","AT1","LAMB1","ITGA2_ITGB1",0.0422406553297524,0,"LAMB1_ITGA2_ITGB1","LAMB1 - (ITGA2+ITGB1)","LAMININ","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","LAMC1","ITGA2_ITGB1",0.0645491832335293,0,"LAMC1_ITGA2_ITGB1","LAMC1 - (ITGA2+ITGB1)","LAMININ","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","LAMA2","ITGA3_ITGB1",0.157035443333582,0,"LAMA2_ITGA3_ITGB1","LAMA2 - (ITGA3+ITGB1)","LAMININ","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","LAMA2","ITGA3_ITGB1",0.0850449739380314,0,"LAMA2_ITGA3_ITGB1","LAMA2 - (ITGA3+ITGB1)","LAMININ","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","LAMA4","ITGA3_ITGB1",0.156724356354674,0,"LAMA4_ITGA3_ITGB1","LAMA4 - (ITGA3+ITGB1)","LAMININ","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","LAMA4","ITGA3_ITGB1",0.0848621429671661,0,"LAMA4_ITGA3_ITGB1","LAMA4 - (ITGA3+ITGB1)","LAMININ","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","LAMB1","ITGA3_ITGB1",0.114182674271319,0,"LAMB1_ITGA3_ITGB1","LAMB1 - (ITGA3+ITGB1)","LAMININ","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","AT1","LAMB1","ITGA3_ITGB1",0.0742241688845628,0,"LAMB1_ITGA3_ITGB1","LAMB1 - (ITGA3+ITGB1)","LAMININ","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","LAMB1","ITGA3_ITGB1",0.0604291008238227,0,"LAMB1_ITGA3_ITGB1","LAMB1 - (ITGA3+ITGB1)","LAMININ","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (nasal)","LAMB1","ITGA3_ITGB1",0.0384649489113967,0,"LAMB1_ITGA3_ITGB1","LAMB1 - (ITGA3+ITGB1)","LAMININ","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","LAMC1","ITGA3_ITGB1",0.111458402133121,0,"LAMC1_ITGA3_ITGB1","LAMC1 - (ITGA3+ITGB1)","LAMININ","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","LAMC1","ITGA3_ITGB1",0.0589020500644437,0,"LAMC1_ITGA3_ITGB1","LAMC1 - (ITGA3+ITGB1)","LAMININ","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","AT1","THBS1","ITGA3_ITGB1",0.0748693923373796,0,"THBS1_ITGA3_ITGB1","THBS1 - (ITGA3+ITGB1)","THBS","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (nasal)","THBS1","ITGA3_ITGB1",0.0388123531336628,0,"THBS1_ITGA3_ITGB1","THBS1 - (ITGA3+ITGB1)","THBS","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","AT1","THBS2","ITGA3_ITGB1",0.0738172013929744,0,"THBS2_ITGA3_ITGB1","THBS2 - (ITGA3+ITGB1)","THBS","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (nasal)","THBS2","ITGA3_ITGB1",0.0382459475321374,0,"THBS2_ITGA3_ITGB1","THBS2 - (ITGA3+ITGB1)","THBS","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","COL1A1","ITGA3_ITGB1",0.0368974879025682,0,"COL1A1_ITGA3_ITGB1","COL1A1 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","AT1","COL1A1","ITGA3_ITGB1",0.251294679589476,0,"COL1A1_ITGA3_ITGB1","COL1A1 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","COL1A1","ITGA3_ITGB1",0.0187569157279098,0,"COL1A1_ITGA3_ITGB1","COL1A1 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (nasal)","COL1A1","ITGA3_ITGB1",0.143445777779868,0,"COL1A1_ITGA3_ITGB1","COL1A1 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","COL1A2","ITGA3_ITGB1",0.117899908485349,0,"COL1A2_ITGA3_ITGB1","COL1A2 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","AT1","COL1A2","ITGA3_ITGB1",0.252187277082456,0,"COL1A2_ITGA3_ITGB1","COL1A2 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","COL1A2","ITGA3_ITGB1",0.0625198890370032,0,"COL1A2_ITGA3_ITGB1","COL1A2 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (nasal)","COL1A2","ITGA3_ITGB1",0.144028989637392,0,"COL1A2_ITGA3_ITGB1","COL1A2 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","COL4A1","ITGA3_ITGB1",0.0409666422255464,0,"COL4A1_ITGA3_ITGB1","COL4A1 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","AT1","COL4A1","ITGA3_ITGB1",0.188512810721755,0,"COL4A1_ITGA3_ITGB1","COL4A1 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","COL4A1","ITGA3_ITGB1",0.0208688283830244,0,"COL4A1_ITGA3_ITGB1","COL4A1 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (nasal)","COL4A1","ITGA3_ITGB1",0.103870132998359,0,"COL4A1_ITGA3_ITGB1","COL4A1 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","COL4A2","ITGA3_ITGB1",0.0409529042011161,0,"COL4A2_ITGA3_ITGB1","COL4A2 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","AT1","COL4A2","ITGA3_ITGB1",0.0728042918236957,0,"COL4A2_ITGA3_ITGB1","COL4A2 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","COL4A2","ITGA3_ITGB1",0.020861683484017,0,"COL4A2_ITGA3_ITGB1","COL4A2 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (nasal)","COL4A2","ITGA3_ITGB1",0.0377012730594421,0,"COL4A2_ITGA3_ITGB1","COL4A2 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","COL4A5","ITGA3_ITGB1",0.0366272151441318,0,"COL4A5_ITGA3_ITGB1","COL4A5 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","COL4A5","ITGA3_ITGB1",0.01861695342484,0,"COL4A5_ITGA3_ITGB1","COL4A5 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","COL6A1","ITGA3_ITGB1",0.112557970354662,0,"COL6A1_ITGA3_ITGB1","COL6A1 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","AT1","COL6A1","ITGA3_ITGB1",0.19616246186782,0,"COL6A1_ITGA3_ITGB1","COL6A1 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","COL6A1","ITGA3_ITGB1",0.0595178651656938,0,"COL6A1_ITGA3_ITGB1","COL6A1 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (nasal)","COL6A1","ITGA3_ITGB1",0.108544500289457,0,"COL6A1_ITGA3_ITGB1","COL6A1 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","COL6A2","ITGA3_ITGB1",0.100032815952001,0,"COL6A2_ITGA3_ITGB1","COL6A2 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","AT1","COL6A2","ITGA3_ITGB1",0.207886627013131,0,"COL6A2_ITGA3_ITGB1","COL6A2 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","COL6A2","ITGA3_ITGB1",0.0525454070869917,0,"COL6A2_ITGA3_ITGB1","COL6A2 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (nasal)","COL6A2","ITGA3_ITGB1",0.115786254227307,0,"COL6A2_ITGA3_ITGB1","COL6A2 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","COL6A3","ITGA3_ITGB1",0.149706858273148,0,"COL6A3_ITGA3_ITGB1","COL6A3 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","AT1","COL6A3","ITGA3_ITGB1",0.250132450955745,0,"COL6A3_ITGA3_ITGB1","COL6A3 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","COL6A3","ITGA3_ITGB1",0.0807542154410707,0,"COL6A3_ITGA3_ITGB1","COL6A3 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (nasal)","COL6A3","ITGA3_ITGB1",0.14268728622205,0,"COL6A3_ITGA3_ITGB1","COL6A3 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","AT1","COL6A6","ITGA3_ITGB1",0.122111924112354,0,"COL6A6_ITGA3_ITGB1","COL6A6 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","COL6A6","ITGA3_ITGB1",0.0648989965978726,0,"COL6A6_ITGA3_ITGB1","COL6A6 - (ITGA3+ITGB1)","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (non-nasal)","COL1A1","SDC4",0.0830748821415036,0,"COL1A1_SDC4","COL1A1 - SDC4","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (non-nasal)","COL1A1","SDC4",0.442508833994364,0,"COL1A1_SDC4","COL1A1 - SDC4","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (non-nasal)","COL1A2","SDC4",0.240172042175335,0,"COL1A2_SDC4","COL1A2 - SDC4","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (non-nasal)","COL1A2","SDC4",0.443678138413141,0,"COL1A2_SDC4","COL1A2 - SDC4","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (non-nasal)","COL4A1","SDC4",0.0917514525276643,0,"COL4A1_SDC4","COL4A1 - SDC4","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (non-nasal)","COL4A1","SDC4",0.35457945442459,0,"COL4A1_SDC4","COL4A1 - SDC4","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (non-nasal)","COL4A2","SDC4",0.0917223127942358,0,"COL4A2_SDC4","COL4A2 - SDC4","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (non-nasal)","COL4A2","SDC4",0.156611857509637,0,"COL4A2_SDC4","COL4A2 - SDC4","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (non-nasal)","COL4A5","SDC4",0.0824953345346604,0,"COL4A5_SDC4","COL4A5 - SDC4","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (non-nasal)","COL6A1","SDC4",0.230739224682976,0,"COL6A1_SDC4","COL6A1 - SDC4","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (non-nasal)","COL6A1","SDC4",0.365929140255137,0,"COL6A1_SDC4","COL6A1 - SDC4","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (non-nasal)","COL6A2","SDC4",0.208147687652457,0,"COL6A2_SDC4","COL6A2 - SDC4","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (non-nasal)","COL6A2","SDC4",0.382965817564112,0,"COL6A2_SDC4","COL6A2 - SDC4","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (non-nasal)","COL6A3","SDC4",0.293972267008672,0,"COL6A3_SDC4","COL6A3 - SDC4","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (non-nasal)","COL6A3","SDC4",0.440983128965914,0,"COL6A3_SDC4","COL6A3 - SDC4","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (non-nasal)","COL6A6","SDC4",0.247526505947514,0,"COL6A6_SDC4","COL6A6 - SDC4","COLLAGEN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (non-nasal)","FN1","SDC4",0.309505340974662,0,"FN1_SDC4","FN1 - SDC4","FN1","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (non-nasal)","FN1","SDC4",0.442188932692271,0,"FN1_SDC4","FN1 - SDC4","FN1","ECM-Receptor","KEGG: hsa04512",0.05
+"Adventitial fibroblasts","Multiciliated (non-nasal)","TNC","SDC4",0.303682297065488,0.02,"TNC_SDC4","TNC - SDC4","TENASCIN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (non-nasal)","TNC","SDC4",0.165385715436691,0,"TNC_SDC4","TNC - SDC4","TENASCIN","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Multiciliated (non-nasal)","TNXB","SDC4",0.237256683118871,0,"TNXB_SDC4","TNXB - SDC4","TENASCIN","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (non-nasal)","THBS1","SDC4",0.160642301422511,0,"THBS1_SDC4","THBS1 - SDC4","THBS","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (non-nasal)","THBS2","SDC4",0.158591326063024,0,"THBS2_SDC4","THBS2 - SDC4","THBS","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","AT1","THBS1","CD47",0.126248107804428,0,"THBS1_CD47","THBS1 - CD47","THBS","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (nasal)","THBS1","CD47",0.0393136433190593,0,"THBS1_CD47","THBS1 - CD47","THBS","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","AT1","THBS2","CD47",0.124571083695831,0,"THBS2_CD47","THBS2 - CD47","THBS","ECM-Receptor","KEGG: hsa04512",0.05
+"Peribronchial fibroblasts","Multiciliated (nasal)","THBS2","CD47",0.0387402170208291,0,"THBS2_CD47","THBS2 - CD47","THBS","ECM-Receptor","KEGG: hsa04512",0.05
+"Alveolar fibroblasts","Goblet (nasal)","APP","CD74",0.128189529446847,0,"APP_CD74","APP - CD74","APP","Cell-Cell Contact","PMID: 19849849",0.05
+"Peribronchial fibroblasts","Goblet (nasal)","APP","CD74",0.205680635336256,0,"APP_CD74","APP - CD74","APP","Cell-Cell Contact","PMID: 19849849",0.05
+"Alveolar fibroblasts","AT1","CADM1","CADM1",0.104691038567083,0,"CADM1_CADM1","CADM1 - CADM1","CADM","Cell-Cell Contact","PMID: 24503895",0.05
+"Alveolar fibroblasts","AT2","CADM1","CADM1",0.0236460551081082,0,"CADM1_CADM1","CADM1 - CADM1","CADM","Cell-Cell Contact","PMID: 24503895",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","CADM1","CADM1",0.0174856532164456,0,"CADM1_CADM1","CADM1 - CADM1","CADM","Cell-Cell Contact","PMID: 24503895",0.05
+"Adventitial fibroblasts","Multiciliated (nasal)","CD46","JAG1",0.069846330768567,0,"CD46_JAG1","CD46 - JAG1","CD46","Cell-Cell Contact","PMID: 23086448",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","CD46","JAG1",0.0464178625329263,0,"CD46_JAG1","CD46 - JAG1","CD46","Cell-Cell Contact","PMID: 23086448",0.05
+"Alveolar fibroblasts","AT1","CD99","CD99",0.0178122510603185,0,"CD99_CD99","CD99 - CD99","CD99","Cell-Cell Contact","KEGG: hsa04514",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","NEGR1","NEGR1",0.0978191551474061,0,"NEGR1_NEGR1","NEGR1 - NEGR1","NEGR","Cell-Cell Contact","KEGG: hsa04514",0.05
+"Alveolar fibroblasts","AT1","PTPRM","PTPRM",0.195670414877081,0,"PTPRM_PTPRM","PTPRM - PTPRM","PTPRM","Cell-Cell Contact","KEGG: hsa04514",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","PTPRM","PTPRM",0.213271660807342,0,"PTPRM_PTPRM","PTPRM - PTPRM","PTPRM","Cell-Cell Contact","KEGG: hsa04514",0.05
+"Adventitial fibroblasts","Multiciliated (nasal)","SEMA4A","PLXNB1",0.0802326607581027,0,"SEMA4A_PLXNB1","SEMA4A - PLXNB1","SEMA4","Cell-Cell Contact","PMID: 27533782",0.05
+"Adventitial fibroblasts","Multiciliated (nasal)","SEMA4A","PLXNB2",0.0656946481293394,0,"SEMA4A_PLXNB2","SEMA4A - PLXNB2","SEMA4","Cell-Cell Contact","PMID: 27533782",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","SEMA6A","PLXNA2",0.0184606543286443,0,"SEMA6A_PLXNA2","SEMA6A - PLXNA2","SEMA6","Cell-Cell Contact","PMID: 27533782",0.05
+"Alveolar fibroblasts","AT1","LRFN5","PTPRF",0.0576093841290865,0,"LRFN5_PTPRF","LRFN5 - PTPRF","PTPR","Cell-Cell Contact","PMID: 29674953;PMID: 23916315",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","LRFN5","PTPRF",0.02028700068271,0,"LRFN5_PTPRF","LRFN5 - PTPRF","PTPR","Cell-Cell Contact","PMID: 29674953;PMID: 23916315",0.05
+"Alveolar fibroblasts","AT1","CD99","PILRB",0.0204164992543509,0,"CD99_PILRB","Cd99 - Pilrb","CD99","Cell-Cell Contact","uniprot;PMID:18234675",0.05
+"Alveolar fibroblasts","Multiciliated (nasal)","CD99","PILRB",0.0188799038976116,0,"CD99_PILRB","Cd99 - Pilrb","CD99","Cell-Cell Contact","uniprot;PMID:18234675",0.05
+"Adventitial fibroblasts","AT1","CEACAM6","CEACAM6",0.0889834760035612,0,"CEACAM6_CEACAM6","CEACAM6 - CEACAM6","CEACAM","Cell-Cell Contact","PMID:11590190",0.05
+"Peribronchial fibroblasts","AT1","CEACAM6","CEACAM6",0.0308438510490188,0,"CEACAM6_CEACAM6","CEACAM6 - CEACAM6","CEACAM","Cell-Cell Contact","PMID:11590190",0.05
+"Adventitial fibroblasts","AT2","CEACAM6","CEACAM6",0.15194911725926,0,"CEACAM6_CEACAM6","CEACAM6 - CEACAM6","CEACAM","Cell-Cell Contact","PMID:11590190",0.05
+"Peribronchial fibroblasts","AT2","CEACAM6","CEACAM6",0.055160241617108,0,"CEACAM6_CEACAM6","CEACAM6 - CEACAM6","CEACAM","Cell-Cell Contact","PMID:11590190",0.05
+"Adventitial fibroblasts","Goblet (nasal)","CEACAM6","CEACAM6",0.157770718069453,0,"CEACAM6_CEACAM6","CEACAM6 - CEACAM6","CEACAM","Cell-Cell Contact","PMID:11590190",0.05
+"Peribronchial fibroblasts","Goblet (nasal)","CEACAM6","CEACAM6",0.0575251256297746,0,"CEACAM6_CEACAM6","CEACAM6 - CEACAM6","CEACAM","Cell-Cell Contact","PMID:11590190",0.05
+"Alveolar fibroblasts","AT1","CNTN1","NOTCH2",0.0188719143487506,0,"CNTN1_NOTCH2","CNTN1 - NOTCH2","CNTN","Cell-Cell Contact","reactome;PMID:14567914;PMID: 33957164",0.05

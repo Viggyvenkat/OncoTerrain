@@ -332,6 +332,7 @@ def __figure_five_C(adata, save_path, embedding, hallmark_list=None):
         plt.grid(False)
         plt.tight_layout()
         plt.savefig(f"{save_path}/{hallmark}.png", dpi=300, bbox_inches='tight')
+        plt.close(fig)
         logging.info(f"Saved figure to {save_path}/{hallmark}.png")
 
     logging.info("Completed __figure_five_C plotting function.")
@@ -643,11 +644,14 @@ def __figure_five_H():
         if dir.is_dir() and dir.name.startswith('SD'):
             logging.info(f"Processing {dir.name} with OncoTerrain.")
             sd10_adata = sc.read_10x_mtx(dir, var_names='gene_symbols')
-            onco_terrain_10 = OncoTerrain(sd10_adata)
-            onco_terrain_10.inferencing(
-                save_path=BASE_DIR / f"figures/{dir.name}_oncoterrain",
+            sd10_adata.obs["sample"] = dir.name
+            sample_outdir = BASE_DIR / f"figures/{dir.name}_oncoterrain"
+            onco_terrain_10 = OncoTerrain(sd10_adata, sample_key="sample")
+            annotated = onco_terrain_10.inferencing(
+                save_path=sample_outdir,
                 save_adata=True
             )
+            annotated.write_h5ad(sample_outdir / "OncoTerrain_annotated.h5ad")
             logging.info(f"OncoTerrain {dir.name} processing completed successfully.")
 
 
@@ -655,11 +659,14 @@ def __figure_five_H():
         if dir.is_dir() and dir.name.startswith('SMP-'):
             logging.info(f"Processing {dir.name} with OncoTerrain.")
             sd10_adata = sc.read_10x_mtx(dir, var_names='gene_symbols')
-            onco_terrain_10 = OncoTerrain(sd10_adata)
-            onco_terrain_10.inferencing(
-                save_path=BASE_DIR / f"figures/{dir.name}_oncoterrain",
+            sd10_adata.obs["sample"] = dir.name
+            sample_outdir = BASE_DIR / f"figures/{dir.name}_oncoterrain"
+            onco_terrain_10 = OncoTerrain(sd10_adata, sample_key="sample")
+            annotated = onco_terrain_10.inferencing(
+                save_path=sample_outdir,
                 save_adata=True
             )
+            annotated.write_h5ad(sample_outdir / "OncoTerrain_annotated.h5ad")
             logging.info(f"OncoTerrain {dir.name} processing completed successfully.")
 
 def __figure_five_F(save_path, mice_data: pd.DataFrame, source_data=True):
@@ -668,8 +675,14 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame, source_data=True):
     save_path.mkdir(parents=True, exist_ok=True)
 
     logging.info("Starting __figure_five_F plotting function.")
-    
-    oncoterrain_files = list((BASE_DIR / 'figures').glob('*_oncoterrain/OncoTerrain_annotated.h5ad'))
+
+    oncoterrain_files = []
+    for outdir in sorted((BASE_DIR / 'figures').glob('*_oncoterrain')):
+        flat = outdir / 'OncoTerrain_annotated.h5ad'
+        if flat.exists():
+            oncoterrain_files.append(flat)
+            continue
+        oncoterrain_files.extend(sorted(outdir.glob('*/OncoTerrain_annotated.h5ad')))
     
     mice_columns = [col for col in mice_data.columns if col not in ['Gene', 'Human_Ortholog']]
     logging.info(f"Mice data columns for analysis: {mice_columns}")
@@ -968,7 +981,10 @@ if __name__ == '__main__':
 
     # 5F cosine/Pearson similarity deltas (needs the mouse reference + the 5H inference outputs).
     mice_csv = BASE_DIR / 'data/averaged_gene_expression_nature_mice_supp_1.csv'
-    onco_ready = list((BASE_DIR / 'figures').glob('*_oncoterrain/OncoTerrain_annotated.h5ad'))
+    onco_ready = (
+        list((BASE_DIR / 'figures').glob('*_oncoterrain/OncoTerrain_annotated.h5ad'))
+        or list((BASE_DIR / 'figures').glob('*_oncoterrain/*/OncoTerrain_annotated.h5ad'))
+    )
     if mice_csv.exists() and onco_ready:
         __figure_five_F(save_path=BASE_DIR / 'figures/fig-5F', mice_data=pd.read_csv(mice_csv))
     else:

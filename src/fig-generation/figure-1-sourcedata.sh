@@ -17,12 +17,11 @@ mkdir -p .cache/matplotlib .cache/numba
 export MPLCONFIGDIR=".cache/matplotlib"
 export NUMBA_CACHE_DIR=".cache/numba"
 
-if [ -f /cache/home/vvv11/miniforge3/etc/profile.d/conda.sh ]; then
-    source /cache/home/vvv11/miniforge3/etc/profile.d/conda.sh
-    set +u
-    conda activate revision
-    set -u
-fi
+source /cache/home/vvv11/miniforge3/etc/profile.d/conda.sh
+set +u
+conda activate revision
+set -u
+
 
 # Figure 1: full figure render; panel 1G also writes source data.
 python src/fig-generation/figure-1.py

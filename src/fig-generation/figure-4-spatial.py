@@ -12,7 +12,6 @@ from scipy.stats import pearsonr, mannwhitneyu
 from scipy.spatial.distance import pdist, squareform
 from itertools import combinations
 import seaborn as sns
-import squidpy as sq
 
 from source_data_common import panel_csv, write_pvalues, aggregate_to_excel
 
@@ -105,6 +104,12 @@ def make_custom_cmap(color):
 
 def plot_spatial_gene_sets(adatas, output_dir, img=False, library_id=None, point_size=1.5):
     os.makedirs(output_dir, exist_ok=True)
+    try:
+        import squidpy as sq
+    except Exception as exc:
+        sq = None
+        logger.warning("Squidpy spatial plotting unavailable; using Scanpy fallback. Error: %s", exc)
+
     gene_sets = [
         ["MIF", "CD74", "CXCR4"],
         ["MIF", "CD74", "CD44"],
@@ -132,18 +137,32 @@ def plot_spatial_gene_sets(adatas, output_dir, img=False, library_id=None, point
                 for gene in genes_present:
                     fig, ax = plt.subplots(1, 1, figsize=(8, 8))
 
-                    sq.pl.spatial_scatter(
-                        adata,
-                        color=gene,
-                        library_id=library_id,
-                        img=img,
-                        ax=ax,
-                        size=point_size,
-                        na_color="white",
-                        cmap="Spectral_r",
-                        shape="hex",
-                        linewidth=0,  
-                    )
+                    if sq is not None:
+                        sq.pl.spatial_scatter(
+                            adata,
+                            color=gene,
+                            library_id=library_id,
+                            img=img,
+                            ax=ax,
+                            size=point_size,
+                            na_color="white",
+                            cmap="Spectral_r",
+                            shape="hex",
+                            linewidth=0,
+                        )
+                    else:
+                        sc.pl.spatial(
+                            adata,
+                            color=gene,
+                            library_id=library_id,
+                            img_key=None if not img else None,
+                            ax=ax,
+                            size=point_size,
+                            spot_size=point_size,
+                            na_color="white",
+                            cmap="Spectral_r",
+                            show=False,
+                        )
 
                     ax.set_title(f"{gene} - {sample_name} ({disease_status})")
                     plt.tight_layout()

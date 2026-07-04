@@ -1,0 +1,5 @@
+"source","target","ligand","receptor","prob","pval","interaction_name","interaction_name_2","pathway_name","annotation","evidence","thresh_used"
+"CD4 T cells","Multiciliated (nasal)","CD46","JAG1",0.0202004212869588,0,"CD46_JAG1","CD46 - JAG1","CD46","Cell-Cell Contact","PMID: 23086448",0.01
+"CD4 T cells","Multiciliated (nasal)","SEMA4D","PLXNB1",0.18104626062887,0,"SEMA4D_PLXNB1","SEMA4D - PLXNB1","SEMA4","Cell-Cell Contact","PMID: 27533782",0.01
+"CD4 T cells","AT1","SEMA4D","PLXNB2",0.0634760936722292,0,"SEMA4D_PLXNB2","SEMA4D - PLXNB2","SEMA4","Cell-Cell Contact","PMID: 27533782",0.01
+"CD4 T cells","Multiciliated (nasal)","SEMA4D","PLXNB2",0.165482811688727,0,"SEMA4D_PLXNB2","SEMA4D - PLXNB2","SEMA4","Cell-Cell Contact","PMID: 27533782",0.01

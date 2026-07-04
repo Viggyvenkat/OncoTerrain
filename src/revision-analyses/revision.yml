@@ -19,12 +19,16 @@ dependencies:
   - pyyaml
   - h5py
   - openpyxl              # writing the Figure_N_source_data.xlsx workbooks
+  - duckdb                # retained for idc-index dependency present in the env
+  - pyarrow               # restores libarrow activation hooks after --prune
   - anndata
   - scanpy
   - leidenalg
   - python-igraph
   - umap-learn
   - squidpy               # figure-4-spatial + py-monocle dep
+  - dask=2023.3.0         # match distributed pulled by squidpy stack
+  - python-annoy          # scanorama dep; avoid pip compiling with old system g++
   - pytorch::pytorch
   - pytorch::torchvision
   - pytorch::pytorch-cuda=12.1

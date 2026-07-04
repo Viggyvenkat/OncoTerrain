@@ -1,0 +1,7 @@
+"source","target","ligand","receptor","prob","pval","interaction_name","interaction_name_2","pathway_name","annotation","evidence","thresh_used"
+"CD4 T cells","AT1","CD6","ALCAM",0.13013629097345,0,"CD6_ALCAM","CD6 - ALCAM","CD6","Cell-Cell Contact","PMID: 23602662",0.01
+"CD4 T cells","AT2","CD6","ALCAM",0.101601951682409,0,"CD6_ALCAM","CD6 - ALCAM","CD6","Cell-Cell Contact","PMID: 23602662",0.01
+"CD4 T cells","Multiciliated (nasal)","CD6","ALCAM",0.115775715814392,0,"CD6_ALCAM","CD6 - ALCAM","CD6","Cell-Cell Contact","PMID: 23602662",0.01
+"CD4 T cells","Multiciliated (non-nasal)","CD6","ALCAM",0.115627924154926,0,"CD6_ALCAM","CD6 - ALCAM","CD6","Cell-Cell Contact","PMID: 23602662",0.01
+"CD4 T cells","Multiciliated (nasal)","SEMA4D","PLXNB1",0.0270460819506391,0,"SEMA4D_PLXNB1","SEMA4D - PLXNB1","SEMA4","Cell-Cell Contact","PMID: 27533782",0.01
+"CD4 T cells","Multiciliated (nasal)","SEMA4D","PLXNB2",0.0219157479928044,0,"SEMA4D_PLXNB2","SEMA4D - PLXNB2","SEMA4","Cell-Cell Contact","PMID: 27533782",0.01
