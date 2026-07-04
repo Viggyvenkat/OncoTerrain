@@ -288,13 +288,22 @@ class OncoTerrain:
                 sc.tl.score_genes(adata, genes_in_adata, score_name=pathway)
         return adata
 
-    def hp_calculation(self):
+    def _hp_calculation(self):
         gmt_root = Path(__file__).resolve().parent / "HallmarkPathGMT"
         gmt_files = [p for p in gmt_root.iterdir() if p.name.endswith(".gmt")]
         for gmt in gmt_files:
             with resources.as_file(gmt) as p:
                 self.adata = self._add_and_aggregate_module_scores(self.adata, Path(p))
         return self.adata
+
+    def _load_bundle(self):
+        local = Path.cwd() / "OncoTerrain.joblib"
+        if local.exists():
+            logging.info("Loading model bundle from %s", local)
+            return joblib.load(local)
+        with resources.as_file(resources.files("OncoTerrain") / "OncoTerrain.joblib") as p:
+            logging.info("Loading packaged model bundle from %s", p)
+            return joblib.load(Path(p))
 
     def _process_one_sample(self, adata_s, outdir, *, pca_n_comps=None, min_cells=3, min_genes=200, neighbors_n_pcs=None, neighbors_k=None, leiden_res=20.00):
         _orig_adata = self.adata
@@ -309,8 +318,7 @@ class OncoTerrain:
             )
             self.adata = self._hp_calculation()
 
-            with resources.as_file(resources.files("OncoTerrain") / "OncoTerrain.joblib") as p:
-                bundle = joblib.load(Path(p))
+            bundle = self._load_bundle()
 
             self.OncoTerrain = bundle["model"]
             self.model_features = list(bundle["features"])
@@ -500,8 +508,7 @@ class OncoTerrain:
         )
         self.adata = self._hp_calculation()
 
-        with resources.as_file(resources.files("OncoTerrain") / "OncoTerrain.joblib") as p:
-            bundle = joblib.load(p)
+        bundle = self._load_bundle()
 
         model = bundle["model"]
         feature_list = list(bundle["features"])

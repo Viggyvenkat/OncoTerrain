@@ -906,75 +906,79 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame, source_data=True):
 
 if __name__ == '__main__':
     BASE_DIR = Path.cwd()
-    data_path = BASE_DIR / 'data/processed_data.h5ad'
-    logging.info(f"Reading data from {data_path}")
-    adata = sc.read_h5ad(filename=str(data_path))
-    
-    logging.info("Copying and preprocessing metadata.")
-    meta_data = adata.obs.copy()
-    meta_data.columns = meta_data.columns.str.replace('^HALLMARK_', '', regex=True)
-    
-    meta_data = meta_data.drop(columns= ['disease', 'sample', 'source', 'tissue', 'n_genes', 'batch', 
-                               'n_genes_by_counts', 'total_counts', 'total_counts_mt', 'pct_counts_mt', 'leiden_res_0.10', 
-                               'leiden_res_1.00', 'leiden_res_5.00', 'leiden_res_10.00', 'leiden_res_20.00', 'leiden_res_0.10_celltype',
-                               'leiden_res_1.00_celltype', 'leiden_res_5.00_celltype', 'leiden_res_10.00_celltype'])
-
-    updated_meta_data, _, _ = __feature_analysis_w_preprocessing(meta_data)
-    
-    numeric_cols_main = updated_meta_data.select_dtypes(include=[np.number]).columns
-    NON_FEATURES = {'tumor_stage', 'project', 'leiden_res_20.00_celltype', 'leiden_res_0.50', 'leiden_res_2.00'}
-    feature_cols = [c for c in numeric_cols_main if c not in NON_FEATURES]
-    hallmark_list = [c for c in feature_cols if c in CONDITIONS.keys()]
-    logging.info(f"Identified hallmark features: {list(hallmark_list)}")
-    
-    features = updated_meta_data[feature_cols].to_numpy()
-    tumor_stage = updated_meta_data['tumor_stage']
-    
-    logging.info("Initializing UMAP reducer with parameters: n_neighbors=50, min_dist=0.05, metric='euclidean'")
-    reducer = umap.UMAP(n_neighbors=50, min_dist=0.05, metric='euclidean', random_state=42)
-    
-    logging.info("Fitting UMAP to features and transforming.")
-    embedding = reducer.fit_transform(features)
-    logging.info("UMAP embedding shape: %s", embedding.shape)
-    
-    fig5B_path = BASE_DIR / 'figures/fig-5B.png'
-    fig5C_path = BASE_DIR / 'figures/fig-5C'
-    fig5D_path = BASE_DIR / 'figures/fig-5D.png'
-
-    df = mannwhitney_by_stage_all_columns(
-        updated_meta_data,
-        stage_key="tumor_stage",
-        stage_order=(0, 1, 2),
-        exclude_cols=("project", "leiden_res_20.00_celltype"),
-        output_csv="figures/supplementary_table_three.csv"
-    )
-    # 5B source data: stage-wise Mann-Whitney U (+ BH-FDR) across all features, with medians.
-    stage_names = {0: "Non-Cancer", 1: "Early", 2: "Advanced"}
-    stats = df.copy()
-    stats["group1"] = stats["group1"].map(stage_names).fillna(stats["group1"])
-    stats["group2"] = stats["group2"].map(stage_names).fillna(stats["group2"])
-    panel_csv(5, '5B_stage_mannwhitney_pvalues', stats)
-
-    logging.info("Generating figure 5B.")
-    __figure_five_B(updated_meta_data, save_path=str(fig5B_path), embedding=embedding)
-
-    logging.info("Generating figure 5C.")
-    __figure_five_C(updated_meta_data, save_path=str(fig5C_path), embedding=embedding, hallmark_list=hallmark_list)
-
-    logging.info("Generating figure 5D.")
-    __figure_five_D(updated_meta_data, save_path=str(fig5D_path))
-
-    stages_to_plot = {0: "Non-Cancer", 1: "Early", 2: "Advanced"}
-    for stage_key, stage_label in stages_to_plot.items():
-        logging.info(f"Generating figure 5E for {stage_label}.")
-        figure_five_E(
-            updated_meta_data,
-            save_path=str(BASE_DIR / f'figures/fig-5E-{stage_label}.png'),
-            stage=stage_key, stage_column='tumor_stage', stage_label=stage_label,
-        )
-
-    logging.info("Training model.")
-    model = __train_model(updated_meta_data)
+    # === TEMP (5H-only re-run): block below commented out to skip the ~7h UMAP fit +
+    # 5B-5E panels + model training. 5H loads the already-trained root OncoTerrain.joblib.
+    # RESTORE this whole block before the next full figure-5 run. ===
+    # data_path = BASE_DIR / 'data/processed_data.h5ad'
+    # logging.info(f"Reading data from {data_path}")
+    # adata = sc.read_h5ad(filename=str(data_path))
+    #
+    # logging.info("Copying and preprocessing metadata.")
+    # meta_data = adata.obs.copy()
+    # meta_data.columns = meta_data.columns.str.replace('^HALLMARK_', '', regex=True)
+    #
+    # meta_data = meta_data.drop(columns= ['disease', 'sample', 'source', 'tissue', 'n_genes', 'batch',
+    #                            'n_genes_by_counts', 'total_counts', 'total_counts_mt', 'pct_counts_mt', 'leiden_res_0.10',
+    #                            'leiden_res_1.00', 'leiden_res_5.00', 'leiden_res_10.00', 'leiden_res_20.00', 'leiden_res_0.10_celltype',
+    #                            'leiden_res_1.00_celltype', 'leiden_res_5.00_celltype', 'leiden_res_10.00_celltype'])
+    #
+    # updated_meta_data, _, _ = __feature_analysis_w_preprocessing(meta_data)
+    #
+    # numeric_cols_main = updated_meta_data.select_dtypes(include=[np.number]).columns
+    # NON_FEATURES = {'tumor_stage', 'project', 'leiden_res_20.00_celltype', 'leiden_res_0.50', 'leiden_res_2.00'}
+    # feature_cols = [c for c in numeric_cols_main if c not in NON_FEATURES]
+    # hallmark_list = [c for c in feature_cols if c in CONDITIONS.keys()]
+    # logging.info(f"Identified hallmark features: {list(hallmark_list)}")
+    #
+    # features = updated_meta_data[feature_cols].to_numpy()
+    # tumor_stage = updated_meta_data['tumor_stage']
+    #
+    # logging.info("Initializing UMAP reducer with parameters: n_neighbors=50, min_dist=0.05, metric='euclidean'")
+    # reducer = umap.UMAP(n_neighbors=50, min_dist=0.05, metric='euclidean', random_state=42)
+    #
+    # logging.info("Fitting UMAP to features and transforming.")
+    # embedding = reducer.fit_transform(features)
+    # logging.info("UMAP embedding shape: %s", embedding.shape)
+    #
+    # fig5B_path = BASE_DIR / 'figures/fig-5B.png'
+    # fig5C_path = BASE_DIR / 'figures/fig-5C'
+    # fig5D_path = BASE_DIR / 'figures/fig-5D.png'
+    #
+    # df = mannwhitney_by_stage_all_columns(
+    #     updated_meta_data,
+    #     stage_key="tumor_stage",
+    #     stage_order=(0, 1, 2),
+    #     exclude_cols=("project", "leiden_res_20.00_celltype"),
+    #     output_csv="figures/supplementary_table_three.csv"
+    # )
+    # # 5B source data: stage-wise Mann-Whitney U (+ BH-FDR) across all features, with medians.
+    # stage_names = {0: "Non-Cancer", 1: "Early", 2: "Advanced"}
+    # stats = df.copy()
+    # stats["group1"] = stats["group1"].map(stage_names).fillna(stats["group1"])
+    # stats["group2"] = stats["group2"].map(stage_names).fillna(stats["group2"])
+    # panel_csv(5, '5B_stage_mannwhitney_pvalues', stats)
+    #
+    # logging.info("Generating figure 5B.")
+    # __figure_five_B(updated_meta_data, save_path=str(fig5B_path), embedding=embedding)
+    #
+    # logging.info("Generating figure 5C.")
+    # __figure_five_C(updated_meta_data, save_path=str(fig5C_path), embedding=embedding, hallmark_list=hallmark_list)
+    #
+    # logging.info("Generating figure 5D.")
+    # __figure_five_D(updated_meta_data, save_path=str(fig5D_path))
+    #
+    # stages_to_plot = {0: "Non-Cancer", 1: "Early", 2: "Advanced"}
+    # for stage_key, stage_label in stages_to_plot.items():
+    #     logging.info(f"Generating figure 5E for {stage_label}.")
+    #     figure_five_E(
+    #         updated_meta_data,
+    #         save_path=str(BASE_DIR / f'figures/fig-5E-{stage_label}.png'),
+    #         stage=stage_key, stage_column='tumor_stage', stage_label=stage_label,
+    #     )
+    #
+    # logging.info("Training model.")
+    # model = __train_model(updated_meta_data)
+    # === END TEMP block ===
 
     # 5H OncoTerrain inference -> writes figures/*_oncoterrain/OncoTerrain_annotated.h5ad
     __figure_five_H()
