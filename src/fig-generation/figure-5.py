@@ -678,6 +678,10 @@ def __figure_five_F(save_path, mice_data: pd.DataFrame, source_data=True):
 
     oncoterrain_files = []
     for outdir in sorted((BASE_DIR / 'figures').glob('*_oncoterrain')):
+        # Skip the combined all-cohort object (built for the 5D violin): 5F is a per-sample
+        # analysis, and densifying its ~1.3M-cell matrix OOMs + would add a bogus "all" sample.
+        if outdir.name == 'all_oncoterrain':
+            continue
         flat = outdir / 'OncoTerrain_annotated.h5ad'
         if flat.exists():
             oncoterrain_files.append(flat)
