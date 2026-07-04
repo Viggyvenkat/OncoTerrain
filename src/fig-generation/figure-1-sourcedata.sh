@@ -12,10 +12,10 @@
 
 set -euo pipefail
 
-cd /Users/vigneshvenkat/Desktop/SJDLab/OncoTerrain || exit 1
+cd ../.. || exit 1
 mkdir -p .cache/matplotlib .cache/numba
-export MPLCONFIGDIR="/Users/vigneshvenkat/Desktop/SJDLab/OncoTerrain/.cache/matplotlib"
-export NUMBA_CACHE_DIR="/Users/vigneshvenkat/Desktop/SJDLab/OncoTerrain/.cache/numba"
+export MPLCONFIGDIR=".cache/matplotlib"
+export NUMBA_CACHE_DIR=".cache/numba"
 
 if [ -f /cache/home/vvv11/miniforge3/etc/profile.d/conda.sh ]; then
     source /cache/home/vvv11/miniforge3/etc/profile.d/conda.sh

@@ -34,6 +34,6 @@ dependencies:
       - scanorama         # imported by figure-4-spatial
       - scprep            # figure-5 5F normalization
       # Local editable package (BioTuring py-monocle) used by figure-3 pseudotime panels.
-      # NOTE: run env update from the repo root so this relative path resolves, e.g.:
-      #   mamba env update -f src/revision-analyses/revision.yml --prune -y
-      - -e ./py-monocle
+      # NOTE: run env update from src/revision-analyses so this relative path resolves, e.g.:
+      #   mamba env update -f revision.yml --prune -y
+      - -e ../../py-monocle
